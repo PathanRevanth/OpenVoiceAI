@@ -1,0 +1,60 @@
+[project]
+name = "voicefirst"
+version = "0.1.0"
+description = "Voice-First AI — an agentic control plane built on Pydantic AI v2"
+readme = "../README.md"
+requires-python = ">=3.11"
+dependencies = [
+    # --- Agent framework (latest stable v2 line) ---
+    "pydantic-ai>=2.41.0,<3",
+    "pydantic-ai-harness[prompt-injection-defender]==0.29.1",
+    "pydantic-ai-skills>=1.4.0",
+    "pydantic>=2.13.5,<3",
+    "pydantic-settings>=2.10",
+    # Sandboxed Python for code_mode / dynamic_workflow (harness monty exec).
+    "pydantic-monty>=0.0.20",
+    "pydantic>=2.13.5,<3",
+    # --- API layer ---
+    "fastapi>=0.141.1,<1",
+    "uvicorn[standard]>=0.38",
+    # --- Persistence / infra ---
+    "sqlalchemy[asyncio]>=2.0.45",
+    "asyncpg>=0.31",
+    "aiosqlite>=0.22",
+    "redis>=6.0",
+    # Async MongoDB driver for the live path of the MongoDB specialist tools.
+    "pymongo>=4.10",
+    # --- Observability ---
+    "logfire>=4.41",
+    # --- Utilities ---
+    "httpx>=0.28",
+    "pyyaml>=6.0.3",
+    "python-multipart>=0.0.22",
+    "pyjwt[crypto]>=2.10",
+    "cryptography>=45",
+    "audioop-lts>=0.2; python_version >= '3.13'",
+    # Keyless web search for the Research agent (pydantic-ai duckduckgo tool).
+    "ddgs>=9.0",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.0",
+    "pytest-asyncio>=1.2",
+    "ruff>=0.14",
+]
+
+[build-system]
+requires = ["uv_build>=0.11,<1"]
+build-backend = "uv_build"
+
+[tool.uv.build-backend]
+module-name = "voicefirst"
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 110
+target-version = "py311"

@@ -1,0 +1,773 @@
+INFO:     Started server process [30372]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://127.0.0.1:8000 (Press CTRL+C to quit)
+INFO:     127.0.0.1:49715 - "OPTIONS /api/events HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49715 - "GET /api/events HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58611 - "OPTIONS /api/events HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58611 - "OPTIONS /api/events HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58611 - "GET /api/events HTTP/1.1" 200 OK
+INFO:     127.0.0.1:63509 - "GET /api/events HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60740 - "GET /api/approvals HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60740 - "GET /api/conversations HTTP/1.1" 200 OK
+INFO:     127.0.0.1:63242 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:63246 - "WebSocket /api/voice/ws?token=eyJhbGciOiJFZERTQSIsImtpZCI6Inl4UktwR0E5T0IxRHNnbVFtM3NOb3pzSzNBQzNmZGRTIn0.eyJpYXQiOjE3ODg0OTUyMzcsIm5hbWUiOiJFMkUgVGVzdGVyIiwiZW1haWwiOiJlMmVAdm9pY2VmaXJzdC5sb2NhbCIsImVtYWlsVmVyaWZpZWQiOmZhbHNlLCJpbWFnZSI6bnVsbCwiY3JlYXRlZEF0IjoiMjAyNi0wOS0wMVQxNjo1MToyNC44OThaIiwidXBkYXRlZEF0IjoiMjAyNi0wOS0wMVQxNjo1MToyNC44OThaIiwicm9sZSI6ImFkbWluIiwiYmFubmVkIjpmYWxzZSwiYmFuUmVhc29uIjpudWxsLCJiYW5FeHBpcmVzIjpudWxsLCJpZCI6IkplRlpKc2V5OUZuZktKcFFJQjRJeXNkZUlNM1VIdHhSIiwic3ViIjoiSmVGWkpzZXk5Rm5mS0pwUUlCNEl5c2RlSU0zVUh0eFIiLCJleHAiOjE3ODg0OTYxMzcsImlzcyI6Imh0dHA6Ly9sb2NhbGhvc3Q6MzAwMCIsImF1ZCI6Imh0dHA6Ly9sb2NhbGhvc3Q6MzAwMCJ9.EVdjroQcq8R7_7aWgChrzR9_zWPiRDTe-jybffu9iv7slooaVNyfmjVD-XbJ-hzqHj4wlInD88Vao7MNJ8b7AQ" [accepted]
+INFO:     connection open
+INFO:     127.0.0.1:62891 - "GET /api/approvals HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62891 - "GET /api/conversations HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57426 - "GET /api/approvals HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57426 - "GET /api/conversations HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61189 - "GET /api/approvals HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54510 - "GET /api/conversations HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61189 - "GET /api/approvals HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54510 - "GET /api/conversations HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50570 - "GET /api/approvals HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50570 - "GET /api/conversations HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56298 - "GET /api/approvals HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56298 - "GET /api/conversations HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59638 - "GET /api/approvals HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59638 - "GET /api/conversations HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59638 - "OPTIONS /api/platform HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59638 - "GET /api/events HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60325 - "OPTIONS /api/agents HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60325 - "GET /api/agents HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60325 - "OPTIONS /api/voice/catalog HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60325 - "GET /api/voice/catalog HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60325 - "GET /api/conversations HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60325 - "GET /api/approvals HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60325 - "GET /api/platform HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60325 - "GET /api/events HTTP/1.1" 200 OK
+INFO:     127.0.0.1:65462 - "GET /api/agents HTTP/1.1" 200 OK
+INFO:     127.0.0.1:65462 - "GET /api/voice/catalog HTTP/1.1" 200 OK
+INFO:     127.0.0.1:65262 - "GET /api/approvals HTTP/1.1" 200 OK
+INFO:     127.0.0.1:65262 - "GET /api/conversations HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58973 - "GET /api/approvals HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58973 - "GET /api/conversations HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57150 - "GET /api/approvals HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57150 - "GET /api/approvals HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57150 - "GET /api/conversations HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57150 - "GET /api/conversations HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50609 - "GET /api/approvals HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50609 - "GET /api/conversations HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60492 - "GET /api/approvals HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60492 - "GET /api/conversations HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53504 - "GET /api/approvals HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53504 - "GET /api/conversations HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56195 - "GET /api/approvals HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56195 - "GET /api/conversations HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55645 - "GET /api/approvals HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55147 - "GET /api/conversations HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50060 - "GET /api/approvals HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57901 - "GET /api/conversations HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50060 - "GET /api/approvals HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57901 - "GET /api/conversations HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56375 - "GET /api/approvals HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59232 - "GET /api/conversations HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61774 - "GET /api/approvals HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54402 - "GET /api/conversations HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52866 - "GET /api/approvals HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57938 - "GET /api/conversations HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61155 - "GET /api/approvals HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61398 - "GET /api/conversations HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61398 - "OPTIONS /api/chat HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61155 - "POST /api/chat HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61155 - "GET /api/conversations HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61155 - "GET /api/approvals HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61155 - "GET /api/conversations HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61679 - "GET /api/approvals HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61679 - "GET /api/conversations HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61679 - "GET /api/approvals HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61679 - "GET /api/conversations HTTP/1.1" 200 OK
+INFO:     127.0.0.1:63769 - "GET /api/approvals HTTP/1.1" 200 OK
+INFO:     127.0.0.1:63769 - "GET /api/conversations HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64150 - "GET /api/runs?limit=2 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55487 - "GET /api/approvals HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55487 - "GET /api/conversations HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64535 - "GET /api/approvals HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64535 - "GET /api/conversations HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52572 - "GET /api/approvals HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52572 - "GET /api/conversations HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60292 - "GET /api/approvals HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60292 - "GET /api/conversations HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59312 - "GET /api/approvals HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52842 - "GET /api/conversations HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59312 - "GET /api/approvals HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52842 - "GET /api/conversations HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64456 - "GET /api/approvals HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53399 - "GET /api/conversations HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50060 - "GET /api/approvals HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50339 - "GET /api/conversations HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58089 - "GET /api/approvals HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62870 - "GET /api/conversations HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55188 - "GET /api/approvals HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62029 - "GET /api/conversations HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54298 - "GET /api/approvals HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54794 - "GET /api/conversations HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57442 - "GET /api/approvals HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57442 - "GET /api/approvals HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57442 - "GET /api/conversations HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57442 - "GET /api/conversations HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52375 - "GET /api/approvals HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52375 - "GET /api/conversations HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54134 - "GET /api/approvals HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54134 - "GET /api/conversations HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62563 - "GET /api/approvals HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62563 - "GET /api/conversations HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51000 - "GET /api/approvals HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51000 - "GET /api/conversations HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53357 - "GET /api/approvals HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53357 - "GET /api/conversations HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52032 - "GET /api/conversations HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52085 - "GET /api/approvals HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52032 - "GET /api/conversations HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52085 - "GET /api/approvals HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53946 - "GET /api/approvals HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53946 - "GET /api/conversations HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55214 - "GET /api/approvals HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55214 - "GET /api/conversations HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49321 - "OPTIONS /api/approvals HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57400 - "OPTIONS /api/conversations HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57400 - "GET /api/approvals HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49321 - "GET /api/conversations HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61305 - "GET /api/approvals HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61732 - "GET /api/conversations HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62185 - "GET /api/approvals HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62563 - "GET /api/conversations HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61303 - "OPTIONS /api/approvals HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61303 - "GET /api/approvals HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61303 - "GET /api/approvals HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61303 - "OPTIONS /api/conversations HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61303 - "GET /api/conversations HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61303 - "GET /api/conversations HTTP/1.1" 200 OK
+INFO:     127.0.0.1:63986 - "GET /api/approvals HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62029 - "GET /api/conversations HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58605 - "GET /api/approvals HTTP/1.1" 200 OK
+INFO:     127.0.0.1:63444 - "GET /api/conversations HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55532 - "GET /api/approvals HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55532 - "GET /api/conversations HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56289 - "GET /api/approvals HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56289 - "GET /api/conversations HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58349 - "GET /api/approvals HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58349 - "GET /api/conversations HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54760 - "GET /api/conversations HTTP/1.1" 200 OK
+INFO:     127.0.0.1:65504 - "GET /api/approvals HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54760 - "GET /api/conversations HTTP/1.1" 200 OK
+INFO:     127.0.0.1:65504 - "GET /api/approvals HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57961 - "GET /api/approvals HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57961 - "GET /api/conversations HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55058 - "GET /api/approvals HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55058 - "GET /api/conversations HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49895 - "GET /api/approvals HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49895 - "GET /api/conversations HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61668 - "GET /api/approvals HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61668 - "GET /api/conversations HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51142 - "GET /api/approvals HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52477 - "GET /api/conversations HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52754 - "GET /api/approvals HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52754 - "GET /api/approvals HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52754 - "GET /api/conversations HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52754 - "GET /api/conversations HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52326 - "GET /api/conversations HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53521 - "GET /api/approvals HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60898 - "GET /api/approvals HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49671 - "GET /api/conversations HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62695 - "GET /api/approvals HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53554 - "GET /api/conversations HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56083 - "GET /api/conversations HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54518 - "GET /api/approvals HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53552 - "GET /api/approvals HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53552 - "GET /api/conversations HTTP/1.1" 200 OK
+INFO:     127.0.0.1:65171 - "GET /api/approvals HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59686 - "GET /api/conversations HTTP/1.1" 200 OK
+INFO:     127.0.0.1:65171 - "GET /api/approvals HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59686 - "GET /api/conversations HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58891 - "GET /api/approvals HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58891 - "GET /api/conversations HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55098 - "GET /api/approvals HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55098 - "GET /api/conversations HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53814 - "GET /api/approvals HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53814 - "GET /api/conversations HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56614 - "GET /api/approvals HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56614 - "GET /api/conversations HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50877 - "GET /api/approvals HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50877 - "GET /api/conversations HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57994 - "GET /api/approvals HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57994 - "GET /api/conversations HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57994 - "GET /api/approvals HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57994 - "GET /api/conversations HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59740 - "GET /api/approvals HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59740 - "GET /api/conversations HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59740 - "OPTIONS /api/platform HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59740 - "OPTIONS /api/events HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59740 - "GET /api/conversations HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59740 - "GET /api/approvals HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59740 - "GET /api/platform HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59740 - "GET /api/events HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62421 - "OPTIONS /api/platform HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58208 - "OPTIONS /api/events HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62421 - "OPTIONS /api/platform HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58208 - "OPTIONS /api/events HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58208 - "GET /api/events HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61280 - "GET /api/approvals HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61217 - "GET /api/conversations HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62421 - "GET /api/platform HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61280 - "GET /api/approvals HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61217 - "GET /api/conversations HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62421 - "GET /api/platform HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50751 - "GET /api/events HTTP/1.1" 200 OK
+INFO:     127.0.0.1:63010 - "GET /api/events HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61026 - "GET /api/approvals HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51090 - "GET /api/platform HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57170 - "GET /api/conversations HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62421 - "OPTIONS /api/agents HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62421 - "GET /api/agents HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62421 - "OPTIONS /api/voice/catalog HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62421 - "GET /api/voice/catalog HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62421 - "GET /api/conversations HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62421 - "GET /api/approvals HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62421 - "GET /api/platform HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62421 - "GET /api/events HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61217 - "GET /api/agents HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61217 - "GET /api/voice/catalog HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59739 - "WebSocket /api/voice/ws?token=eyJhbGciOiJFZERTQSIsImtpZCI6Inl4UktwR0E5T0IxRHNnbVFtM3NOb3pzSzNBQzNmZGRTIn0.eyJpYXQiOjE3ODg0OTYzMTIsIm5hbWUiOiJFMkUgVGVzdGVyIiwiZW1haWwiOiJlMmVAdm9pY2VmaXJzdC5kZXYiLCJlbWFpbFZlcmlmaWVkIjpmYWxzZSwiaW1hZ2UiOm51bGwsImNyZWF0ZWRBdCI6IjIwMjYtMDgtMjhUMTg6NDc6MTUuOTk5WiIsInVwZGF0ZWRBdCI6IjIwMjYtMDgtMjhUMTg6NDc6MTUuOTk5WiIsInJvbGUiOiJhZG1pbiIsImJhbm5lZCI6ZmFsc2UsImJhblJlYXNvbiI6bnVsbCwiYmFuRXhwaXJlcyI6bnVsbCwiaWQiOiJZdk9iT3lKbFUxM2dvQ1pJcTRqZENOSEhsMG5hbTdpTiIsInN1YiI6Ill2T2JPeUpsVTEzZ29DWklxNGpkQ05ISGwwbmFtN2lOIiwiZXhwIjoxNzg4NDk3MjEyLCJpc3MiOiJodHRwOi8vbG9jYWxob3N0OjMwMDAiLCJhdWQiOiJodHRwOi8vbG9jYWxob3N0OjMwMDAifQ.U_Tbf1OPuELyv5Q9Hajf6U0KylavSdDexk7d4uHriv9qTKIueIfZE2GdXeCJEdY7qi2oIojH-WoFkyI4g4_IDw" [accepted]
+INFO:     connection open
+INFO:     127.0.0.1:56393 - "GET /api/approvals HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55161 - "GET /api/conversations HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57818 - "GET /api/approvals HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57818 - "GET /api/conversations HTTP/1.1" 200 OK
+D:\Voice-First-AI\backend\src\voicefirst\api\voice.py:240: RuntimeWarning: coroutine 'RealtimeSession.send_audio' was never awaited
+  session.send_audio(audio)
+RuntimeWarning: Enable tracemalloc to get the object allocation traceback
+INFO:     127.0.0.1:61165 - "GET /api/conversations HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54708 - "GET /api/approvals HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51676 - "GET /api/conversations HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54521 - "GET /api/approvals HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58426 - "GET /api/conversations HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57280 - "WebSocket /api/voice/ws?token=eyJhbGciOiJFZERTQSIsImtpZCI6Inl4UktwR0E5T0IxRHNnbVFtM3NOb3pzSzNBQzNmZGRTIn0.eyJpYXQiOjE3ODg0OTYzMTIsIm5hbWUiOiJFMkUgVGVzdGVyIiwiZW1haWwiOiJlMmVAdm9pY2VmaXJzdC5kZXYiLCJlbWFpbFZlcmlmaWVkIjpmYWxzZSwiaW1hZ2UiOm51bGwsImNyZWF0ZWRBdCI6IjIwMjYtMDgtMjhUMTg6NDc6MTUuOTk5WiIsInVwZGF0ZWRBdCI6IjIwMjYtMDgtMjhUMTg6NDc6MTUuOTk5WiIsInJvbGUiOiJhZG1pbiIsImJhbm5lZCI6ZmFsc2UsImJhblJlYXNvbiI6bnVsbCwiYmFuRXhwaXJlcyI6bnVsbCwiaWQiOiJZdk9iT3lKbFUxM2dvQ1pJcTRqZENOSEhsMG5hbTdpTiIsInN1YiI6Ill2T2JPeUpsVTEzZ29DWklxNGpkQ05ISGwwbmFtN2lOIiwiZXhwIjoxNzg4NDk3MjEyLCJpc3MiOiJodHRwOi8vbG9jYWxob3N0OjMwMDAiLCJhdWQiOiJodHRwOi8vbG9jYWxob3N0OjMwMDAifQ.U_Tbf1OPuELyv5Q9Hajf6U0KylavSdDexk7d4uHriv9qTKIueIfZE2GdXeCJEdY7qi2oIojH-WoFkyI4g4_IDw" [accepted]
+INFO:     connection open
+INFO:     127.0.0.1:64698 - "GET /api/approvals HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51256 - "GET /api/conversations HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64927 - "WebSocket /api/voice/ws?token=eyJhbGciOiJFZERTQSIsImtpZCI6Inl4UktwR0E5T0IxRHNnbVFtM3NOb3pzSzNBQzNmZGRTIn0.eyJpYXQiOjE3ODg0OTYzMTIsIm5hbWUiOiJFMkUgVGVzdGVyIiwiZW1haWwiOiJlMmVAdm9pY2VmaXJzdC5kZXYiLCJlbWFpbFZlcmlmaWVkIjpmYWxzZSwiaW1hZ2UiOm51bGwsImNyZWF0ZWRBdCI6IjIwMjYtMDgtMjhUMTg6NDc6MTUuOTk5WiIsInVwZGF0ZWRBdCI6IjIwMjYtMDgtMjhUMTg6NDc6MTUuOTk5WiIsInJvbGUiOiJhZG1pbiIsImJhbm5lZCI6ZmFsc2UsImJhblJlYXNvbiI6bnVsbCwiYmFuRXhwaXJlcyI6bnVsbCwiaWQiOiJZdk9iT3lKbFUxM2dvQ1pJcTRqZENOSEhsMG5hbTdpTiIsInN1YiI6Ill2T2JPeUpsVTEzZ29DWklxNGpkQ05ISGwwbmFtN2lOIiwiZXhwIjoxNzg4NDk3MjEyLCJpc3MiOiJodHRwOi8vbG9jYWxob3N0OjMwMDAiLCJhdWQiOiJodHRwOi8vbG9jYWxob3N0OjMwMDAifQ.U_Tbf1OPuELyv5Q9Hajf6U0KylavSdDexk7d4uHriv9qTKIueIfZE2GdXeCJEdY7qi2oIojH-WoFkyI4g4_IDw" [accepted]
+INFO:     connection open
+INFO:     127.0.0.1:52972 - "GET /api/approvals HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56056 - "GET /api/conversations HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56056 - "GET /api/conversations HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56900 - "GET /api/conversations HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64887 - "GET /api/approvals HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62811 - "GET /api/conversations HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51332 - "GET /api/approvals HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57109 - "GET /api/conversations HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57109 - "GET /api/conversations HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57109 - "GET /api/approvals HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51332 - "GET /api/conversations HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52237 - "WebSocket /api/voice/ws?token=eyJhbGciOiJFZERTQSIsImtpZCI6Inl4UktwR0E5T0IxRHNnbVFtM3NOb3pzSzNBQzNmZGRTIn0.eyJpYXQiOjE3ODg0OTYzMTIsIm5hbWUiOiJFMkUgVGVzdGVyIiwiZW1haWwiOiJlMmVAdm9pY2VmaXJzdC5kZXYiLCJlbWFpbFZlcmlmaWVkIjpmYWxzZSwiaW1hZ2UiOm51bGwsImNyZWF0ZWRBdCI6IjIwMjYtMDgtMjhUMTg6NDc6MTUuOTk5WiIsInVwZGF0ZWRBdCI6IjIwMjYtMDgtMjhUMTg6NDc6MTUuOTk5WiIsInJvbGUiOiJhZG1pbiIsImJhbm5lZCI6ZmFsc2UsImJhblJlYXNvbiI6bnVsbCwiYmFuRXhwaXJlcyI6bnVsbCwiaWQiOiJZdk9iT3lKbFUxM2dvQ1pJcTRqZENOSEhsMG5hbTdpTiIsInN1YiI6Ill2T2JPeUpsVTEzZ29DWklxNGpkQ05ISGwwbmFtN2lOIiwiZXhwIjoxNzg4NDk3MjEyLCJpc3MiOiJodHRwOi8vbG9jYWxob3N0OjMwMDAiLCJhdWQiOiJodHRwOi8vbG9jYWxob3N0OjMwMDAifQ.U_Tbf1OPuELyv5Q9Hajf6U0KylavSdDexk7d4uHriv9qTKIueIfZE2GdXeCJEdY7qi2oIojH-WoFkyI4g4_IDw" [accepted]
+INFO:     connection open
+INFO:     127.0.0.1:51332 - "GET /api/conversations HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58910 - "GET /api/approvals HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58910 - "GET /api/conversations HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51332 - "GET /api/approvals HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51332 - "GET /api/conversations HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57068 - "GET /api/approvals HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57068 - "GET /api/conversations HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58195 - "GET /api/approvals HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58195 - "GET /api/conversations HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57808 - "GET /api/approvals HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57808 - "GET /api/conversations HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53062 - "GET /api/approvals HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50748 - "GET /api/conversations HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58730 - "GET /api/approvals HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51352 - "GET /api/conversations HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61568 - "GET /api/approvals HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57234 - "GET /api/conversations HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52706 - "GET /api/approvals HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52706 - "GET /api/conversations HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57234 - "GET /api/approvals HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57234 - "GET /api/conversations HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59528 - "GET /api/approvals HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54251 - "GET /api/conversations HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49701 - "GET /api/approvals HTTP/1.1" 200 OK
+INFO:     127.0.0.1:63948 - "GET /api/conversations HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59555 - "GET /api/approvals HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59555 - "GET /api/conversations HTTP/1.1" 200 OK
+INFO:     127.0.0.1:63449 - "GET /api/approvals HTTP/1.1" 200 OK
+INFO:     127.0.0.1:63449 - "GET /api/conversations HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56650 - "GET /api/approvals HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56650 - "GET /api/conversations HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56650 - "GET /api/approvals HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56650 - "GET /api/conversations HTTP/1.1" 200 OK
+INFO:     127.0.0.1:65487 - "GET /api/approvals HTTP/1.1" 200 OK
+INFO:     127.0.0.1:65487 - "GET /api/conversations HTTP/1.1" 200 OK
+Exception in callback _ProactorBasePipeTransport._call_connection_lost()
+handle: <Handle _ProactorBasePipeTransport._call_connection_lost()>
+Traceback (most recent call last):
+  File "C:\Users\patha\AppData\Roaming\uv\python\cpython-3.13.13-windows-x86_64-none\Lib\asyncio\events.py", line 89, in _run
+    self._context.run(self._callback, *self._args)
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\patha\AppData\Roaming\uv\python\cpython-3.13.13-windows-x86_64-none\Lib\asyncio\proactor_events.py", line 165, in _call_connection_lost
+    self._sock.shutdown(socket.SHUT_RDWR)
+    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^
+ConnectionResetError: [WinError 10054] An existing connection was forcibly closed by the remote host
+Exception in callback _ProactorBasePipeTransport._call_connection_lost()
+handle: <Handle _ProactorBasePipeTransport._call_connection_lost()>
+Traceback (most recent call last):
+  File "C:\Users\patha\AppData\Roaming\uv\python\cpython-3.13.13-windows-x86_64-none\Lib\asyncio\events.py", line 89, in _run
+    self._context.run(self._callback, *self._args)
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\patha\AppData\Roaming\uv\python\cpython-3.13.13-windows-x86_64-none\Lib\asyncio\proactor_events.py", line 165, in _call_connection_lost
+    self._sock.shutdown(socket.SHUT_RDWR)
+    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^
+ConnectionResetError: [WinError 10054] An existing connection was forcibly closed by the remote host
+Exception in callback _ProactorBasePipeTransport._call_connection_lost()
+handle: <Handle _ProactorBasePipeTransport._call_connection_lost()>
+Traceback (most recent call last):
+  File "C:\Users\patha\AppData\Roaming\uv\python\cpython-3.13.13-windows-x86_64-none\Lib\asyncio\events.py", line 89, in _run
+    self._context.run(self._callback, *self._args)
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\patha\AppData\Roaming\uv\python\cpython-3.13.13-windows-x86_64-none\Lib\asyncio\proactor_events.py", line 165, in _call_connection_lost
+    self._sock.shutdown(socket.SHUT_RDWR)
+    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^
+ConnectionResetError: [WinError 10054] An existing connection was forcibly closed by the remote host
+ERROR:    Exception in ASGI application
+Traceback (most recent call last):
+  File "D:\Voice-First-AI\backend\.venv\Lib\site-packages\uvicorn\protocols\websockets\websockets_sansio_impl.py", line 409, in run_asgi
+    result = await self.app(self.scope, self.receive, self.send)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\Voice-First-AI\backend\.venv\Lib\site-packages\uvicorn\middleware\proxy_headers.py", line 63, in __call__
+    return await self.app(scope, receive, send)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\Voice-First-AI\backend\.venv\Lib\site-packages\fastapi\applications.py", line 1163, in __call__
+    await super().__call__(scope, receive, send)
+  File "D:\Voice-First-AI\backend\.venv\Lib\site-packages\starlette\applications.py", line 96, in __call__
+    await self.middleware_stack(scope, receive, send)
+  File "D:\Voice-First-AI\backend\.venv\Lib\site-packages\starlette\middleware\errors.py", line 151, in __call__
+    await self.app(scope, receive, send)
+  File "D:\Voice-First-AI\backend\.venv\Lib\site-packages\starlette\middleware\cors.py", line 80, in __call__
+    await self.app(scope, receive, send)
+  File "D:\Voice-First-AI\backend\.venv\Lib\site-packages\starlette\middleware\exceptions.py", line 63, in __call__
+    await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)
+  File "D:\Voice-First-AI\backend\.venv\Lib\site-packages\starlette\_exception_handler.py", line 53, in wrapped_app
+    raise exc
+  File "D:\Voice-First-AI\backend\.venv\Lib\site-packages\starlette\_exception_handler.py", line 42, in wrapped_app
+    await app(scope, receive, sender)
+  File "D:\Voice-First-AI\backend\.venv\Lib\site-packages\fastapi\middleware\asyncexitstack.py", line 18, in __call__
+    await self.app(scope, receive, send)
+  File "D:\Voice-First-AI\backend\.venv\Lib\site-packages\starlette\routing.py", line 670, in __call__
+    await self.middleware_stack(scope, receive, send)
+  File "D:\Voice-First-AI\backend\.venv\Lib\site-packages\fastapi\routing.py", line 2734, in app
+    await route.handle(scope, receive, send)
+  File "D:\Voice-First-AI\backend\.venv\Lib\site-packages\fastapi\routing.py", line 1780, in handle
+    await self.original_router.handle(scope, receive, send)
+  File "D:\Voice-First-AI\backend\.venv\Lib\site-packages\fastapi\routing.py", line 2789, in handle
+    await included_router._handle_selected(scope, receive, send)
+  File "D:\Voice-First-AI\backend\.venv\Lib\site-packages\fastapi\routing.py", line 1802, in _handle_selected
+    await route.handle(scope, receive, send)
+  File "D:\Voice-First-AI\backend\.venv\Lib\site-packages\starlette\routing.py", line 354, in handle
+    await self.app(scope, receive, send)
+  File "D:\Voice-First-AI\backend\.venv\Lib\site-packages\fastapi\routing.py", line 184, in app
+    await wrap_app_handling_exceptions(app, session)(scope, receive, send)
+  File "D:\Voice-First-AI\backend\.venv\Lib\site-packages\starlette\_exception_handler.py", line 53, in wrapped_app
+    raise exc
+  File "D:\Voice-First-AI\backend\.venv\Lib\site-packages\starlette\_exception_handler.py", line 42, in wrapped_app
+    await app(scope, receive, sender)
+  File "D:\Voice-First-AI\backend\.venv\Lib\site-packages\fastapi\routing.py", line 181, in app
+    await func(session)
+  File "D:\Voice-First-AI\backend\.venv\Lib\site-packages\fastapi\routing.py", line 796, in app
+    await dependant.call(**solved_result.values)
+  File "D:\Voice-First-AI\backend\src\voicefirst\api\voice.py", line 259, in voice_ws
+    await stack.aclose()
+  File "C:\Users\patha\AppData\Roaming\uv\python\cpython-3.13.13-windows-x86_64-none\Lib\contextlib.py", line 705, in aclose
+    await self.__aexit__(None, None, None)
+  File "C:\Users\patha\AppData\Roaming\uv\python\cpython-3.13.13-windows-x86_64-none\Lib\contextlib.py", line 768, in __aexit__
+    raise exc
+  File "C:\Users\patha\AppData\Roaming\uv\python\cpython-3.13.13-windows-x86_64-none\Lib\contextlib.py", line 751, in __aexit__
+    cb_suppress = await cb(*exc_details)
+                  ^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\patha\AppData\Roaming\uv\python\cpython-3.13.13-windows-x86_64-none\Lib\contextlib.py", line 221, in __aexit__
+    await anext(self.gen)
+  File "D:\Voice-First-AI\backend\.venv\Lib\site-packages\pydantic_ai\agent\abstract.py", line 2274, in session
+    async with self._agent._open_realtime_session(  # pyright: ignore[reportPrivateUsage]
+               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        self._model,
+        ^^^^^^^^^^^^
+    ...<14 lines>...
+        provider_session=provider_session,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ) as session:
+    ^
+  File "C:\Users\patha\AppData\Roaming\uv\python\cpython-3.13.13-windows-x86_64-none\Lib\contextlib.py", line 221, in __aexit__
+    await anext(self.gen)
+  File "D:\Voice-First-AI\backend\.venv\Lib\site-packages\pydantic_ai\agent\__init__.py", line 3752, in _open_realtime_session
+    async with session:
+               ^^^^^^^
+  File "D:\Voice-First-AI\backend\.venv\Lib\site-packages\pydantic_ai\realtime\_session.py", line 786, in __aexit__
+    await self.close()
+  File "D:\Voice-First-AI\backend\.venv\Lib\site-packages\pydantic_ai\realtime\_session.py", line 863, in close
+    raise self._pump_error
+  File "D:\Voice-First-AI\backend\.venv\Lib\site-packages\pydantic_ai\realtime\_session.py", line 2504, in _pump
+    if await self._handle_pump_event(event):
+       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\Voice-First-AI\backend\.venv\Lib\site-packages\pydantic_ai\realtime\_session.py", line 2387, in _handle_pump_event
+    return await self._handle_non_tool_pump_event(event)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\Voice-First-AI\backend\.venv\Lib\site-packages\pydantic_ai\realtime\_session.py", line 2491, in _handle_non_tool_pump_event
+    for out in self._translate_event(event):
+               ~~~~~~~~~~~~~~~~~~~~~^^^^^^^
+  File "D:\Voice-First-AI\backend\.venv\Lib\site-packages\pydantic_ai\realtime\_session.py", line 2062, in _translate_event
+    raise RealtimeError(model_name=self._error_model_name, message=event.message)
+pydantic_ai.realtime.model.RealtimeError: OpenAI Realtime connection closed: no close frame received or sent
+ERROR:    Exception in ASGI application
+Traceback (most recent call last):
+  File "D:\Voice-First-AI\backend\.venv\Lib\site-packages\uvicorn\protocols\websockets\websockets_sansio_impl.py", line 409, in run_asgi
+    result = await self.app(self.scope, self.receive, self.send)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\Voice-First-AI\backend\.venv\Lib\site-packages\uvicorn\middleware\proxy_headers.py", line 63, in __call__
+    return await self.app(scope, receive, send)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\Voice-First-AI\backend\.venv\Lib\site-packages\fastapi\applications.py", line 1163, in __call__
+    await super().__call__(scope, receive, send)
+  File "D:\Voice-First-AI\backend\.venv\Lib\site-packages\starlette\applications.py", line 96, in __call__
+    await self.middleware_stack(scope, receive, send)
+  File "D:\Voice-First-AI\backend\.venv\Lib\site-packages\starlette\middleware\errors.py", line 151, in __call__
+    await self.app(scope, receive, send)
+  File "D:\Voice-First-AI\backend\.venv\Lib\site-packages\starlette\middleware\cors.py", line 80, in __call__
+    await self.app(scope, receive, send)
+  File "D:\Voice-First-AI\backend\.venv\Lib\site-packages\starlette\middleware\exceptions.py", line 63, in __call__
+    await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)
+  File "D:\Voice-First-AI\backend\.venv\Lib\site-packages\starlette\_exception_handler.py", line 53, in wrapped_app
+    raise exc
+  File "D:\Voice-First-AI\backend\.venv\Lib\site-packages\starlette\_exception_handler.py", line 42, in wrapped_app
+    await app(scope, receive, sender)
+  File "D:\Voice-First-AI\backend\.venv\Lib\site-packages\fastapi\middleware\asyncexitstack.py", line 18, in __call__
+    await self.app(scope, receive, send)
+  File "D:\Voice-First-AI\backend\.venv\Lib\site-packages\starlette\routing.py", line 670, in __call__
+    await self.middleware_stack(scope, receive, send)
+  File "D:\Voice-First-AI\backend\.venv\Lib\site-packages\fastapi\routing.py", line 2734, in app
+    await route.handle(scope, receive, send)
+  File "D:\Voice-First-AI\backend\.venv\Lib\site-packages\fastapi\routing.py", line 1780, in handle
+    await self.original_router.handle(scope, receive, send)
+  File "D:\Voice-First-AI\backend\.venv\Lib\site-packages\fastapi\routing.py", line 2789, in handle
+    await included_router._handle_selected(scope, receive, send)
+  File "D:\Voice-First-AI\backend\.venv\Lib\site-packages\fastapi\routing.py", line 1802, in _handle_selected
+    await route.handle(scope, receive, send)
+  File "D:\Voice-First-AI\backend\.venv\Lib\site-packages\starlette\routing.py", line 354, in handle
+    await self.app(scope, receive, send)
+  File "D:\Voice-First-AI\backend\.venv\Lib\site-packages\fastapi\routing.py", line 184, in app
+    await wrap_app_handling_exceptions(app, session)(scope, receive, send)
+  File "D:\Voice-First-AI\backend\.venv\Lib\site-packages\starlette\_exception_handler.py", line 53, in wrapped_app
+    raise exc
+  File "D:\Voice-First-AI\backend\.venv\Lib\site-packages\starlette\_exception_handler.py", line 42, in wrapped_app
+    await app(scope, receive, sender)
+  File "D:\Voice-First-AI\backend\.venv\Lib\site-packages\fastapi\routing.py", line 181, in app
+    await func(session)
+  File "D:\Voice-First-AI\backend\.venv\Lib\site-packages\fastapi\routing.py", line 796, in app
+    await dependant.call(**solved_result.values)
+  File "D:\Voice-First-AI\backend\src\voicefirst\api\voice.py", line 259, in voice_ws
+    await stack.aclose()
+  File "C:\Users\patha\AppData\Roaming\uv\python\cpython-3.13.13-windows-x86_64-none\Lib\contextlib.py", line 705, in aclose
+    await self.__aexit__(None, None, None)
+  File "C:\Users\patha\AppData\Roaming\uv\python\cpython-3.13.13-windows-x86_64-none\Lib\contextlib.py", line 768, in __aexit__
+    raise exc
+  File "C:\Users\patha\AppData\Roaming\uv\python\cpython-3.13.13-windows-x86_64-none\Lib\contextlib.py", line 751, in __aexit__
+    cb_suppress = await cb(*exc_details)
+                  ^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\patha\AppData\Roaming\uv\python\cpython-3.13.13-windows-x86_64-none\Lib\contextlib.py", line 221, in __aexit__
+    await anext(self.gen)
+  File "D:\Voice-First-AI\backend\.venv\Lib\site-packages\pydantic_ai\agent\abstract.py", line 2274, in session
+    async with self._agent._open_realtime_session(  # pyright: ignore[reportPrivateUsage]
+               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        self._model,
+        ^^^^^^^^^^^^
+    ...<14 lines>...
+        provider_session=provider_session,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ) as session:
+    ^
+  File "C:\Users\patha\AppData\Roaming\uv\python\cpython-3.13.13-windows-x86_64-none\Lib\contextlib.py", line 221, in __aexit__
+    await anext(self.gen)
+  File "D:\Voice-First-AI\backend\.venv\Lib\site-packages\pydantic_ai\agent\__init__.py", line 3752, in _open_realtime_session
+    async with session:
+               ^^^^^^^
+  File "D:\Voice-First-AI\backend\.venv\Lib\site-packages\pydantic_ai\realtime\_session.py", line 786, in __aexit__
+    await self.close()
+  File "D:\Voice-First-AI\backend\.venv\Lib\site-packages\pydantic_ai\realtime\_session.py", line 863, in close
+    raise self._pump_error
+  File "D:\Voice-First-AI\backend\.venv\Lib\site-packages\pydantic_ai\realtime\_session.py", line 2504, in _pump
+    if await self._handle_pump_event(event):
+       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\Voice-First-AI\backend\.venv\Lib\site-packages\pydantic_ai\realtime\_session.py", line 2387, in _handle_pump_event
+    return await self._handle_non_tool_pump_event(event)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\Voice-First-AI\backend\.venv\Lib\site-packages\pydantic_ai\realtime\_session.py", line 2491, in _handle_non_tool_pump_event
+    for out in self._translate_event(event):
+               ~~~~~~~~~~~~~~~~~~~~~^^^^^^^
+  File "D:\Voice-First-AI\backend\.venv\Lib\site-packages\pydantic_ai\realtime\_session.py", line 2062, in _translate_event
+    raise RealtimeError(model_name=self._error_model_name, message=event.message)
+pydantic_ai.realtime.model.RealtimeError: OpenAI Realtime connection closed: no close frame received or sent
+ERROR:    Exception in ASGI application
+Traceback (most recent call last):
+  File "D:\Voice-First-AI\backend\.venv\Lib\site-packages\uvicorn\protocols\websockets\websockets_sansio_impl.py", line 409, in run_asgi
+    result = await self.app(self.scope, self.receive, self.send)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\Voice-First-AI\backend\.venv\Lib\site-packages\uvicorn\middleware\proxy_headers.py", line 63, in __call__
+    return await self.app(scope, receive, send)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\Voice-First-AI\backend\.venv\Lib\site-packages\fastapi\applications.py", line 1163, in __call__
+    await super().__call__(scope, receive, send)
+  File "D:\Voice-First-AI\backend\.venv\Lib\site-packages\starlette\applications.py", line 96, in __call__
+    await self.middleware_stack(scope, receive, send)
+  File "D:\Voice-First-AI\backend\.venv\Lib\site-packages\starlette\middleware\errors.py", line 151, in __call__
+    await self.app(scope, receive, send)
+  File "D:\Voice-First-AI\backend\.venv\Lib\site-packages\starlette\middleware\cors.py", line 80, in __call__
+    await self.app(scope, receive, send)
+  File "D:\Voice-First-AI\backend\.venv\Lib\site-packages\starlette\middleware\exceptions.py", line 63, in __call__
+    await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)
+  File "D:\Voice-First-AI\backend\.venv\Lib\site-packages\starlette\_exception_handler.py", line 53, in wrapped_app
+    raise exc
+  File "D:\Voice-First-AI\backend\.venv\Lib\site-packages\starlette\_exception_handler.py", line 42, in wrapped_app
+    await app(scope, receive, sender)
+  File "D:\Voice-First-AI\backend\.venv\Lib\site-packages\fastapi\middleware\asyncexitstack.py", line 18, in __call__
+    await self.app(scope, receive, send)
+  File "D:\Voice-First-AI\backend\.venv\Lib\site-packages\starlette\routing.py", line 670, in __call__
+    await self.middleware_stack(scope, receive, send)
+  File "D:\Voice-First-AI\backend\.venv\Lib\site-packages\fastapi\routing.py", line 2734, in app
+    await route.handle(scope, receive, send)
+  File "D:\Voice-First-AI\backend\.venv\Lib\site-packages\fastapi\routing.py", line 1780, in handle
+    await self.original_router.handle(scope, receive, send)
+  File "D:\Voice-First-AI\backend\.venv\Lib\site-packages\fastapi\routing.py", line 2789, in handle
+    await included_router._handle_selected(scope, receive, send)
+  File "D:\Voice-First-AI\backend\.venv\Lib\site-packages\fastapi\routing.py", line 1802, in _handle_selected
+    await route.handle(scope, receive, send)
+  File "D:\Voice-First-AI\backend\.venv\Lib\site-packages\starlette\routing.py", line 354, in handle
+    await self.app(scope, receive, send)
+  File "D:\Voice-First-AI\backend\.venv\Lib\site-packages\fastapi\routing.py", line 184, in app
+    await wrap_app_handling_exceptions(app, session)(scope, receive, send)
+  File "D:\Voice-First-AI\backend\.venv\Lib\site-packages\starlette\_exception_handler.py", line 53, in wrapped_app
+    raise exc
+  File "D:\Voice-First-AI\backend\.venv\Lib\site-packages\starlette\_exception_handler.py", line 42, in wrapped_app
+    await app(scope, receive, sender)
+  File "D:\Voice-First-AI\backend\.venv\Lib\site-packages\fastapi\routing.py", line 181, in app
+    await func(session)
+  File "D:\Voice-First-AI\backend\.venv\Lib\site-packages\fastapi\routing.py", line 796, in app
+    await dependant.call(**solved_result.values)
+  File "D:\Voice-First-AI\backend\src\voicefirst\api\voice.py", line 259, in voice_ws
+    await stack.aclose()
+  File "C:\Users\patha\AppData\Roaming\uv\python\cpython-3.13.13-windows-x86_64-none\Lib\contextlib.py", line 705, in aclose
+    await self.__aexit__(None, None, None)
+  File "C:\Users\patha\AppData\Roaming\uv\python\cpython-3.13.13-windows-x86_64-none\Lib\contextlib.py", line 768, in __aexit__
+    raise exc
+  File "C:\Users\patha\AppData\Roaming\uv\python\cpython-3.13.13-windows-x86_64-none\Lib\contextlib.py", line 751, in __aexit__
+    cb_suppress = await cb(*exc_details)
+                  ^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\patha\AppData\Roaming\uv\python\cpython-3.13.13-windows-x86_64-none\Lib\contextlib.py", line 221, in __aexit__
+    await anext(self.gen)
+  File "D:\Voice-First-AI\backend\.venv\Lib\site-packages\pydantic_ai\agent\abstract.py", line 2274, in session
+    async with self._agent._open_realtime_session(  # pyright: ignore[reportPrivateUsage]
+               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        self._model,
+        ^^^^^^^^^^^^
+    ...<14 lines>...
+        provider_session=provider_session,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ) as session:
+    ^
+  File "C:\Users\patha\AppData\Roaming\uv\python\cpython-3.13.13-windows-x86_64-none\Lib\contextlib.py", line 221, in __aexit__
+    await anext(self.gen)
+  File "D:\Voice-First-AI\backend\.venv\Lib\site-packages\pydantic_ai\agent\__init__.py", line 3752, in _open_realtime_session
+    async with session:
+               ^^^^^^^
+  File "D:\Voice-First-AI\backend\.venv\Lib\site-packages\pydantic_ai\realtime\_session.py", line 786, in __aexit__
+    await self.close()
+  File "D:\Voice-First-AI\backend\.venv\Lib\site-packages\pydantic_ai\realtime\_session.py", line 863, in close
+    raise self._pump_error
+  File "D:\Voice-First-AI\backend\.venv\Lib\site-packages\pydantic_ai\realtime\_session.py", line 2504, in _pump
+    if await self._handle_pump_event(event):
+       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\Voice-First-AI\backend\.venv\Lib\site-packages\pydantic_ai\realtime\_session.py", line 2387, in _handle_pump_event
+    return await self._handle_non_tool_pump_event(event)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\Voice-First-AI\backend\.venv\Lib\site-packages\pydantic_ai\realtime\_session.py", line 2491, in _handle_non_tool_pump_event
+    for out in self._translate_event(event):
+               ~~~~~~~~~~~~~~~~~~~~~^^^^^^^
+  File "D:\Voice-First-AI\backend\.venv\Lib\site-packages\pydantic_ai\realtime\_session.py", line 2062, in _translate_event
+    raise RealtimeError(model_name=self._error_model_name, message=event.message)
+pydantic_ai.realtime.model.RealtimeError: OpenAI Realtime connection closed: no close frame received or sent
+ERROR:    Exception in ASGI application
+Traceback (most recent call last):
+  File "D:\Voice-First-AI\backend\.venv\Lib\site-packages\uvicorn\protocols\websockets\websockets_sansio_impl.py", line 409, in run_asgi
+    result = await self.app(self.scope, self.receive, self.send)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\Voice-First-AI\backend\.venv\Lib\site-packages\uvicorn\middleware\proxy_headers.py", line 63, in __call__
+    return await self.app(scope, receive, send)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\Voice-First-AI\backend\.venv\Lib\site-packages\fastapi\applications.py", line 1163, in __call__
+    await super().__call__(scope, receive, send)
+  File "D:\Voice-First-AI\backend\.venv\Lib\site-packages\starlette\applications.py", line 96, in __call__
+    await self.middleware_stack(scope, receive, send)
+  File "D:\Voice-First-AI\backend\.venv\Lib\site-packages\starlette\middleware\errors.py", line 151, in __call__
+    await self.app(scope, receive, send)
+  File "D:\Voice-First-AI\backend\.venv\Lib\site-packages\starlette\middleware\cors.py", line 80, in __call__
+    await self.app(scope, receive, send)
+  File "D:\Voice-First-AI\backend\.venv\Lib\site-packages\starlette\middleware\exceptions.py", line 63, in __call__
+    await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)
+  File "D:\Voice-First-AI\backend\.venv\Lib\site-packages\starlette\_exception_handler.py", line 53, in wrapped_app
+    raise exc
+  File "D:\Voice-First-AI\backend\.venv\Lib\site-packages\starlette\_exception_handler.py", line 42, in wrapped_app
+    await app(scope, receive, sender)
+  File "D:\Voice-First-AI\backend\.venv\Lib\site-packages\fastapi\middleware\asyncexitstack.py", line 18, in __call__
+    await self.app(scope, receive, send)
+  File "D:\Voice-First-AI\backend\.venv\Lib\site-packages\starlette\routing.py", line 670, in __call__
+    await self.middleware_stack(scope, receive, send)
+  File "D:\Voice-First-AI\backend\.venv\Lib\site-packages\fastapi\routing.py", line 2734, in app
+    await route.handle(scope, receive, send)
+  File "D:\Voice-First-AI\backend\.venv\Lib\site-packages\fastapi\routing.py", line 1780, in handle
+    await self.original_router.handle(scope, receive, send)
+  File "D:\Voice-First-AI\backend\.venv\Lib\site-packages\fastapi\routing.py", line 2789, in handle
+    await included_router._handle_selected(scope, receive, send)
+  File "D:\Voice-First-AI\backend\.venv\Lib\site-packages\fastapi\routing.py", line 1802, in _handle_selected
+    await route.handle(scope, receive, send)
+  File "D:\Voice-First-AI\backend\.venv\Lib\site-packages\starlette\routing.py", line 354, in handle
+    await self.app(scope, receive, send)
+  File "D:\Voice-First-AI\backend\.venv\Lib\site-packages\fastapi\routing.py", line 184, in app
+    await wrap_app_handling_exceptions(app, session)(scope, receive, send)
+  File "D:\Voice-First-AI\backend\.venv\Lib\site-packages\starlette\_exception_handler.py", line 53, in wrapped_app
+    raise exc
+  File "D:\Voice-First-AI\backend\.venv\Lib\site-packages\starlette\_exception_handler.py", line 42, in wrapped_app
+    await app(scope, receive, sender)
+  File "D:\Voice-First-AI\backend\.venv\Lib\site-packages\fastapi\routing.py", line 181, in app
+    await func(session)
+  File "D:\Voice-First-AI\backend\.venv\Lib\site-packages\fastapi\routing.py", line 796, in app
+    await dependant.call(**solved_result.values)
+  File "D:\Voice-First-AI\backend\src\voicefirst\api\voice.py", line 259, in voice_ws
+    await stack.aclose()
+  File "C:\Users\patha\AppData\Roaming\uv\python\cpython-3.13.13-windows-x86_64-none\Lib\contextlib.py", line 705, in aclose
+    await self.__aexit__(None, None, None)
+  File "C:\Users\patha\AppData\Roaming\uv\python\cpython-3.13.13-windows-x86_64-none\Lib\contextlib.py", line 768, in __aexit__
+    raise exc
+  File "C:\Users\patha\AppData\Roaming\uv\python\cpython-3.13.13-windows-x86_64-none\Lib\contextlib.py", line 751, in __aexit__
+    cb_suppress = await cb(*exc_details)
+                  ^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\patha\AppData\Roaming\uv\python\cpython-3.13.13-windows-x86_64-none\Lib\contextlib.py", line 221, in __aexit__
+    await anext(self.gen)
+  File "D:\Voice-First-AI\backend\.venv\Lib\site-packages\pydantic_ai\agent\abstract.py", line 2274, in session
+    async with self._agent._open_realtime_session(  # pyright: ignore[reportPrivateUsage]
+               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        self._model,
+        ^^^^^^^^^^^^
+    ...<14 lines>...
+        provider_session=provider_session,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ) as session:
+    ^
+  File "C:\Users\patha\AppData\Roaming\uv\python\cpython-3.13.13-windows-x86_64-none\Lib\contextlib.py", line 221, in __aexit__
+    await anext(self.gen)
+  File "D:\Voice-First-AI\backend\.venv\Lib\site-packages\pydantic_ai\agent\__init__.py", line 3752, in _open_realtime_session
+    async with session:
+               ^^^^^^^
+  File "D:\Voice-First-AI\backend\.venv\Lib\site-packages\pydantic_ai\realtime\_session.py", line 786, in __aexit__
+    await self.close()
+  File "D:\Voice-First-AI\backend\.venv\Lib\site-packages\pydantic_ai\realtime\_session.py", line 863, in close
+    raise self._pump_error
+  File "D:\Voice-First-AI\backend\.venv\Lib\site-packages\pydantic_ai\realtime\_session.py", line 2504, in _pump
+    if await self._handle_pump_event(event):
+       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\Voice-First-AI\backend\.venv\Lib\site-packages\pydantic_ai\realtime\_session.py", line 2387, in _handle_pump_event
+    return await self._handle_non_tool_pump_event(event)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\Voice-First-AI\backend\.venv\Lib\site-packages\pydantic_ai\realtime\_session.py", line 2491, in _handle_non_tool_pump_event
+    for out in self._translate_event(event):
+               ~~~~~~~~~~~~~~~~~~~~~^^^^^^^
+  File "D:\Voice-First-AI\backend\.venv\Lib\site-packages\pydantic_ai\realtime\_session.py", line 2062, in _translate_event
+    raise RealtimeError(model_name=self._error_model_name, message=event.message)
+pydantic_ai.realtime.model.RealtimeError: OpenAI Realtime connection closed: no close frame received or sent
+Exception in callback _ProactorBasePipeTransport._call_connection_lost()
+handle: <Handle _ProactorBasePipeTransport._call_connection_lost()>
+Traceback (most recent call last):
+  File "C:\Users\patha\AppData\Roaming\uv\python\cpython-3.13.13-windows-x86_64-none\Lib\asyncio\events.py", line 89, in _run
+    self._context.run(self._callback, *self._args)
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\patha\AppData\Roaming\uv\python\cpython-3.13.13-windows-x86_64-none\Lib\asyncio\proactor_events.py", line 165, in _call_connection_lost
+    self._sock.shutdown(socket.SHUT_RDWR)
+    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^
+ConnectionResetError: [WinError 10054] An existing connection was forcibly closed by the remote host
+Exception in callback _ProactorBasePipeTransport._call_connection_lost()
+handle: <Handle _ProactorBasePipeTransport._call_connection_lost()>
+Traceback (most recent call last):
+  File "C:\Users\patha\AppData\Roaming\uv\python\cpython-3.13.13-windows-x86_64-none\Lib\asyncio\events.py", line 89, in _run
+    self._context.run(self._callback, *self._args)
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\patha\AppData\Roaming\uv\python\cpython-3.13.13-windows-x86_64-none\Lib\asyncio\proactor_events.py", line 165, in _call_connection_lost
+    self._sock.shutdown(socket.SHUT_RDWR)
+    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^
+ConnectionResetError: [WinError 10054] An existing connection was forcibly closed by the remote host
+INFO:     127.0.0.1:50380 - "OPTIONS /api/approvals HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50380 - "OPTIONS /api/conversations HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50380 - "OPTIONS /api/approvals HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50380 - "OPTIONS /api/conversations HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50380 - "GET /api/approvals HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55263 - "GET /api/conversations HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50380 - "GET /api/approvals HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50427 - "OPTIONS /api/approvals HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50427 - "OPTIONS /api/conversations HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55263 - "GET /api/conversations HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50427 - "GET /api/approvals HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50427 - "GET /api/conversations HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50427 - "OPTIONS /api/events HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55263 - "OPTIONS /api/events HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50380 - "OPTIONS /api/events HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50427 - "GET /api/events HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50380 - "GET /api/events HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55263 - "GET /api/events HTTP/1.1" 200 OK
+Exception in callback _ProactorBasePipeTransport._call_connection_lost()
+handle: <Handle _ProactorBasePipeTransport._call_connection_lost()>
+Traceback (most recent call last):
+  File "C:\Users\patha\AppData\Roaming\uv\python\cpython-3.13.13-windows-x86_64-none\Lib\asyncio\events.py", line 89, in _run
+    self._context.run(self._callback, *self._args)
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\patha\AppData\Roaming\uv\python\cpython-3.13.13-windows-x86_64-none\Lib\asyncio\proactor_events.py", line 165, in _call_connection_lost
+    self._sock.shutdown(socket.SHUT_RDWR)
+    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^
+ConnectionResetError: [WinError 10054] An existing connection was forcibly closed by the remote host
+Exception in callback _ProactorBasePipeTransport._call_connection_lost()
+handle: <Handle _ProactorBasePipeTransport._call_connection_lost()>
+Traceback (most recent call last):
+  File "C:\Users\patha\AppData\Roaming\uv\python\cpython-3.13.13-windows-x86_64-none\Lib\asyncio\events.py", line 89, in _run
+    self._context.run(self._callback, *self._args)
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\patha\AppData\Roaming\uv\python\cpython-3.13.13-windows-x86_64-none\Lib\asyncio\proactor_events.py", line 165, in _call_connection_lost
+    self._sock.shutdown(socket.SHUT_RDWR)
+    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^
+ConnectionResetError: [WinError 10054] An existing connection was forcibly closed by the remote host
+INFO:     127.0.0.1:52435 - "OPTIONS /api/approvals HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52435 - "GET /api/approvals HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52322 - "OPTIONS /api/events HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52322 - "GET /api/events HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52435 - "OPTIONS /api/conversations HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54304 - "OPTIONS /api/events HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52435 - "GET /api/events HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54304 - "GET /api/conversations HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54304 - "GET /api/approvals HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54304 - "GET /api/conversations HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54304 - "GET /api/events HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53186 - "GET /api/approvals HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52168 - "GET /api/conversations HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61088 - "OPTIONS /api/conversations HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61088 - "OPTIONS /api/approvals HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61088 - "OPTIONS /api/platform HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61088 - "GET /api/events HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61926 - "GET /api/events HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49291 - "GET /api/platform HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55964 - "GET /api/approvals HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55757 - "GET /api/conversations HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49291 - "GET /api/platform HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55964 - "GET /api/approvals HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55757 - "GET /api/conversations HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50847 - "GET /api/approvals HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57981 - "GET /api/conversations HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49879 - "GET /api/approvals HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52117 - "GET /api/conversations HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62260 - "GET /api/approvals HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50441 - "GET /api/conversations HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62260 - "GET /api/approvals HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50441 - "GET /api/conversations HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61243 - "GET /api/approvals HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54080 - "GET /api/conversations HTTP/1.1" 200 OK

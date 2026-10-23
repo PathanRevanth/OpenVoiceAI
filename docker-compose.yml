@@ -1,0 +1,58 @@
+name: voicefirst
+
+services:
+  db:
+    image: postgres:18-alpine
+    environment:
+      POSTGRES_USER: voicefirst
+      POSTGRES_PASSWORD: voicefirst
+      POSTGRES_DB: voicefirst
+    restart: unless-stopped
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U voicefirst"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  redis:
+    image: redis:8-alpine
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  backend:
+    build: ./backend
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      VOICEFIRST_DATABASE_URL: postgresql+asyncpg://voicefirst:voicefirst@db:5432/voicefirst
+      VOICEFIRST_REDIS_URL: redis://redis:6379/0
+      VOICEFIRST_AUTH_JWKS_URL: http://frontend:3000/api/auth/jwks
+      VOICEFIRST_AUTH_BASE_URL: http://frontend:3000/api/auth
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  frontend:
+    build: ./frontend
+    restart: unless-stopped
+    environment:
+      BETTER_AUTH_URL: http://localhost:3000
+      NEXT_PUBLIC_API_URL: http://localhost:8000
+    ports:
+      - "3000:3000"
+    depends_on:
+      backend:
+        condition: service_healthy
+
+volumes:
+  pgdata:
