@@ -83,6 +83,22 @@ curl -i https://openvoiceai.vercel.app/api/auth/jwks
 Then open the site, create an account, and start a voice session. Browser mic
 access requires HTTPS (Vercel provides it).
 
+## Production verification (2026-10-25)
+
+Checked against the live deployment, not just locally:
+
+- Vercel sign-up and sign-in return `200`; `/api/auth/token` issues an EdDSA
+  JWT and `/api/auth/jwks` serves the matching key.
+- The Render control plane accepts that JWT (`/api/conversations` returns
+  `200`), so the Vercel → Render auth chain works end to end.
+- Text chat streamed a complete SSE answer through `/api/chat` with no browser
+  console errors.
+- Voice connected over `wss://openvoiceai-backend.onrender.com/api/voice/ws`
+  in `realtime` mode with `google:gemini-3.1-flash-live-preview`, 16 kHz input
+  and 24 kHz output. A spoken turn returned transcripts plus synthesized
+  speech, and the backend logged first audio 1.15 s after the caller stopped
+  speaking.
+
 ## Troubleshooting
 
 - **Sign-up 500 on Vercel** — `DATABASE_URL` missing or the Neon integration
