@@ -228,6 +228,34 @@ Checked against the live deployment, not just locally:
   renders the Northwind page in a sandboxed iframe (`Light, shaped with
   intention.`), and the chat canvas opens the same artifact as a live preview.
 
+## Multimodal chat and voice capture (2026-10-25)
+
+- Voice now asks for microphone permission **before** opening the voice
+  WebSocket, so the click is still a user gesture and a denied permission is
+  reported as an actionable message instead of an idle session. The socket
+  handshake and `start` response each allow 30 s for a Render cold start.
+- While the caller speaks, the live user caption is mirrored into the composer
+  and the provisional turn is hidden from the thread. It becomes a normal
+  message when the turn is finalized. Browser-fallback TTS pauses recognition
+  while the reply is read and re-arms it when speech ends.
+- Attachments accept images, PDF, audio, video, text/source files, and
+  DOCX/XLSX/PPTX. Text and Office files are flattened server-side; legacy
+  `.doc/.xls/.ppt` get a best-effort printable-run extraction; images, PDFs,
+  audio, and video travel as native model content. Image thumbnails are
+  rendered client-side (512 px JPEG) and persisted with the message.
+- Web search is available from the composer globe and Tools menu and routes
+  through the Research specialist, with cited sources.
+- Backend suite: **185 passed**. Production verification after `59f4323`
+  (Vercel Ready, Render `phase: connected`):
+  - A synthetic mic stream reached the realtime Gemini Live session
+    (`google:gemini-3.1-flash-live-preview`, voice Puck, mode `realtime`).
+  - A denied mic permission showed the browser-specific guidance once.
+  - Uploaded DOCX/XLSX/PPTX files were extracted and a PNG was described; the
+    512 px thumbnail survived a reload and conversation reopen.
+  - Web search returned Python 3.15.1 with 4 cited sources.
+  - Actual speech capture still needs a manual test in a browser with a real
+    microphone; automation browsers do not grant mic access.
+
 ## Troubleshooting
 
 - **Sign-up 500 on Vercel** — `DATABASE_URL` missing or the Neon integration
