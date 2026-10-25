@@ -1,12 +1,22 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { authClient } from "@/lib/auth-client";
+import { API_URL } from "@/lib/backend";
 import { Icon } from "@/components/icons";
 
 export default function LoginPage() {
   const router = useRouter();
+
+  // The free Render instance sleeps after ~15 minutes idle. Start the wake-up
+  // while the visitor is typing so the first chat or voice request does not
+  // pay the full 30–60 s cold start.
+  useEffect(() => {
+    const controller = new AbortController();
+    fetch(`${API_URL}/health`, { signal: controller.signal, cache: "no-store" }).catch(() => {});
+    return () => controller.abort();
+  }, []);
   const [mode, setMode] = useState<"signin" | "signup">("signin");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");

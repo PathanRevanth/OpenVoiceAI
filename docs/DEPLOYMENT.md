@@ -8,8 +8,9 @@ The app runs as three managed pieces:
 | FastAPI control plane + voice WebSocket | Render (Docker, free web service) | `https://openvoiceai-backend.onrender.com` |
 | Auth database | Neon Postgres (Vercel Marketplace, free plan) | via `DATABASE_URL` |
 
-Both Vercel and Render are connected to `PathanRevanth/OpenVoiceAI` and deploy
-automatically on every push to `master`.
+Vercel deploys automatically on every push to `master`. Render does too, once
+the **Render GitHub App** is installed for `PathanRevanth/OpenVoiceAI`; Render
+receives push events through that app, not a classic repository webhook.
 
 ## Frontend (Vercel)
 
@@ -54,6 +55,31 @@ The blueprint sets `VOICEFIRST_AUTH_MODE=betterauth`, the JWKS URL
 (`https://openvoiceai.vercel.app/api/auth/jwks`), CORS for the Vercel origin,
 and generates `VOICEFIRST_SECRET_KEY`.
 
+### Auto-deploy
+
+The service has `autoDeployTrigger: commit` and tracks `master`. It also needs
+the Render GitHub App to be authorized for the repository:
+
+1. Open https://github.com/apps/render/installations/new.
+2. Sign in as **PathanRevanth**.
+3. Grant access to `PathanRevanth/OpenVoiceAI` (all repositories also works).
+4. Push any commit to `master`. The Render deploy list should show
+   `trigger: new_commit` within a minute.
+
+If pushes still do not appear, confirm the app is installed at
+https://github.com/settings/installations and that the repository is included.
+A classic repo webhook is not used by Render and will not fix auto-deploy.
+
+### Output limits
+
+Long deliverables are capped at 32,768 output tokens normally and 65,536 for
+thinking runs. The previous 16,384 cap cut a token-dense HTML/SVG page off
+mid-tag at 35,072 characters. With the higher cap, the same request completed
+locally at 48,250 characters (20,206 output tokens) and in production at 59,709
+characters (24,872 output tokens, $0.133332), both with a closed `</html>` and
+closing fence. The persisted assistant message matched the streamed text
+exactly.
+
 ### Free-tier note
 
 Render free web services sleep after ~15 minutes without traffic. The first
@@ -87,6 +113,9 @@ access requires HTTPS (Vercel provides it).
 
 Checked against the live deployment, not just locally:
 
+- Vercel and Render both auto-deployed the same push: commit `dbfe667`
+  appeared in the Render deploy list with `trigger: new_commit` and reached
+  `live`, while Vercel built and aliased the frontend.
 - Vercel sign-up and sign-in return `200`; `/api/auth/token` issues an EdDSA
   JWT and `/api/auth/jwks` serves the matching key.
 - The Render control plane accepts that JWT (`/api/conversations` returns
@@ -98,6 +127,9 @@ Checked against the live deployment, not just locally:
   and 24 kHz output. A spoken turn returned transcripts plus synthesized
   speech, and the backend logged first audio 1.15 s after the caller stopped
   speaking.
+- The long-artifact prompt that previously truncated at 35,072 characters
+  completed in production with the 32k cap: 59,709 characters, 24,872 output
+  tokens, closed `</html>` and fence, persisted identically.
 
 ## Troubleshooting
 
