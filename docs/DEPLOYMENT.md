@@ -12,6 +12,11 @@ Vercel deploys automatically on every push to `master`. Render does too, once
 the **Render GitHub App** is installed for `PathanRevanth/OpenVoiceAI`; Render
 receives push events through that app, not a classic repository webhook.
 
+The Render service uses `rootDir: backend`, so it rebuilds only when a push
+changes files under `backend/` (or `render.yaml`). Frontend- and docs-only
+commits are intentionally skipped: redeploying the free backend for them would
+restart the instance and wipe its ephemeral SQLite for no benefit.
+
 ## Frontend (Vercel)
 
 - Root directory: `frontend`
@@ -63,8 +68,9 @@ the Render GitHub App to be authorized for the repository:
 1. Open https://github.com/apps/render/installations/new.
 2. Sign in as **PathanRevanth**.
 3. Grant access to `PathanRevanth/OpenVoiceAI` (all repositories also works).
-4. Push any commit to `master`. The Render deploy list should show
-   `trigger: new_commit` within a minute.
+4. Push a commit that changes `backend/`. The Render deploy list should show
+   `trigger: new_commit` within a minute. Pushes that only touch the frontend
+   or docs are skipped because of `rootDir: backend`.
 
 If pushes still do not appear, confirm the app is installed at
 https://github.com/settings/installations and that the repository is included.
