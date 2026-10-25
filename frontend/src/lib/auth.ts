@@ -1,6 +1,7 @@
 import { betterAuth } from "better-auth";
 import { admin, jwt } from "better-auth/plugins";
 import Database from "better-sqlite3";
+import { Pool } from "pg";
 
 /**
  * Better Auth server instance.
@@ -8,10 +9,17 @@ import Database from "better-sqlite3";
  * - email/password sign-in with the admin plugin (roles: admin | ops | viewer)
  * - jwt plugin so the backend can verify identity via JWKS (/api/auth/jwks)
  *   and issue JWTs (/api/auth/token) for direct browser→backend calls
- * - SQLite storage so the demo runs with zero external services
+ * - Postgres (Neon) when DATABASE_URL is set, otherwise local SQLite so the
+ *   demo still runs with zero external services
  */
+const databaseUrl = process.env.DATABASE_URL;
+
+const database = databaseUrl
+  ? new Pool({ connectionString: databaseUrl, max: 1 })
+  : new Database("./voicefirst.auth.db");
+
 export const auth = betterAuth({
-  database: new Database("./voicefirst.auth.db"),
+  database,
   secret: process.env.BETTER_AUTH_SECRET ?? "voicefirst-local-dev-secret-change-me",
   emailAndPassword: {
     enabled: true,
