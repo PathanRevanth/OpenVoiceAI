@@ -45,7 +45,7 @@ vercel --prod --yes
 - Build context: `backend`
 - Dockerfile: `backend/Dockerfile`
 - Health check: `/health`
-- Auto-deploy: every commit on `master`
+- Auto-deploy: commits on `master` that change `backend/`
 
 Deploy it once:
 
@@ -90,8 +90,10 @@ exactly.
 
 Render free web services sleep after ~15 minutes without traffic. The first
 request after sleep takes 30–60 seconds. Voice sessions keep the service awake
-while connected; for an always-warm demo, add an uptime monitor that pings
-`https://<service>.onrender.com/health` every 10 minutes.
+while connected, and the app shell polls every 12 seconds while open. The login
+page also fires a one-shot `/health` request on mount, so the instance starts
+waking while the visitor is typing. For an always-warm demo, add an uptime
+monitor that pings `https://<service>.onrender.com/health` every 10 minutes.
 
 ### Persistence
 
