@@ -6,6 +6,7 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from typing import Any
 
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
     AsyncSession,
@@ -30,26 +31,34 @@ class Database:
     @staticmethod
     async def _add_missing_columns(conn: Any) -> None:
         """Lightweight schema evolution: add columns that exist on models but
-        not yet in the database (create_all never alters existing tables)."""
+        not yet in the database (create_all never alters existing tables).
+
+        Must be dialect-aware: a failed ``PRAGMA`` on PostgreSQL aborts the
+        surrounding transaction, which would roll back ``create_all`` too.
+        """
         from voicefirst.db.models import Base
 
+        dialect = conn.dialect.name
         for table in Base.metadata.sorted_tables:
-            try:
+            if dialect == "sqlite":
                 result = await conn.exec_driver_sql(f"PRAGMA table_info({table.name})")
-                rows = result.fetchall() if result else []
-            except Exception:  # noqa: BLE001 - postgres path below
-                rows = []
-            if rows:
-                existing = {row[1] for row in rows}
-            else:
-                try:
-                    result = await conn.exec_driver_sql(
+                existing = {row[1] for row in (result.fetchall() if result else [])}
+            elif dialect == "postgresql":
+                result = await conn.execute(
+                    text(
                         "SELECT column_name FROM information_schema.columns "
-                        f"WHERE table_name = '{table.name}'"
-                    )
-                    existing = {r[0] for r in result.fetchall()}
-                except Exception:  # noqa: BLE001
-                    continue
+                        "WHERE table_schema = current_schema() "
+                        "AND table_name = :table_name"
+                    ),
+                    {"table_name": table.name},
+                )
+                existing = {row[0] for row in result.fetchall()}
+            else:  # pragma: no cover - unsupported dialect
+                continue
+
+            if not existing:
+                # Table missing or unreadable; create_all owns creation.
+                continue
 
             for column in table.columns:
                 if column.name in existing:
@@ -57,11 +66,18 @@ class Database:
                 col_type = column.type.compile(dialect=conn.dialect)
                 default = ""
                 if column.nullable is False:
-                    default = " NOT NULL DEFAULT 0" if column.type.python_type is int else " NOT NULL DEFAULT ''"
+                    try:
+                        python_type = column.type.python_type
+                    except (AttributeError, NotImplementedError):
+                        python_type = str
+                    default = " NOT NULL DEFAULT 0" if python_type is int else " NOT NULL DEFAULT ''"
                 try:
-                    await conn.exec_driver_sql(
-                        f"ALTER TABLE {table.name} ADD COLUMN {column.name} {col_type}{default}"
-                    )
+                    # Savepoint keeps one failed ALTER from aborting the outer
+                    # transaction (PostgreSQL marks it failed until rollback).
+                    async with conn.begin_nested():
+                        await conn.exec_driver_sql(
+                            f"ALTER TABLE {table.name} ADD COLUMN {column.name} {col_type}{default}"
+                        )
                 except Exception:  # noqa: BLE001 - concurrent or unsupported
                     pass
 
