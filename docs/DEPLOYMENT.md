@@ -1,12 +1,13 @@
 # Deployment
 
-The app runs as three managed pieces:
+The app runs on three managed hosts:
 
 | Piece | Host | URL |
 | --- | --- | --- |
 | Next.js experience layer | Vercel (project `openvoiceai`, root `frontend`) | https://openvoiceai.vercel.app |
 | FastAPI control plane + voice WebSocket | Render (Docker, free web service) | `https://openvoiceai-backend.onrender.com` |
-| Auth database | Neon Postgres (Vercel Marketplace, free plan) | via `DATABASE_URL` |
+| Auth database | Neon Postgres `neondb` (Vercel Marketplace, free plan) | via `DATABASE_URL` |
+| Backend database | Neon Postgres `voicefirst` (same Neon project) | via `VOICEFIRST_DATABASE_URL` |
 
 Vercel deploys automatically on every push to `master`. Render does too, once
 the **Render GitHub App** is installed for `PathanRevanth/OpenVoiceAI`; Render
@@ -14,8 +15,9 @@ receives push events through that app, not a classic repository webhook.
 
 The Render service uses `rootDir: backend`, so it rebuilds only when a push
 changes files under `backend/` (or `render.yaml`). Frontend- and docs-only
-commits are intentionally skipped: redeploying the free backend for them would
-restart the instance and wipe its ephemeral SQLite for no benefit.
+commits are intentionally skipped: restarting the free backend for unrelated
+changes would force a cold start. Backend data now lives in Postgres, so
+skipping those deploys no longer risks losing anything.
 
 ## Frontend (Vercel)
 
@@ -60,6 +62,18 @@ The blueprint sets `VOICEFIRST_AUTH_MODE=betterauth`, the JWKS URL
 (`https://openvoiceai.vercel.app/api/auth/jwks`), CORS for the Vercel origin,
 and generates `VOICEFIRST_SECRET_KEY`.
 
+`VOICEFIRST_DATABASE_URL` is deliberately not in `render.yaml`: it contains a
+credential, so it is set on the service instead (dashboard or API). The value is
+the Neon **unpooled** endpoint with the async driver and SSL flag:
+
+```text
+postgresql+asyncpg://<user>:<password>@<endpoint>.c-14.us-east-1.aws.neon.tech/voicefirst?ssl=require
+```
+
+Use the direct endpoint rather than the `-pooler` host for SQLAlchemy/asyncpg.
+Changing an env var does **not** trigger a deploy while
+`autoDeployTrigger: commit` is set, so trigger one manually afterwards.
+
 ### Auto-deploy
 
 The service has `autoDeployTrigger: commit` and tracks `master`. It also needs
@@ -97,9 +111,36 @@ monitor that pings `https://<service>.onrender.com/health` every 10 minutes.
 
 ### Persistence
 
-The container writes SQLite to `/data` (ephemeral on the free plan). Data
-survives while the instance is running but resets on redeploy/restart. Use a
-paid disk or point `VOICEFIRST_DATABASE_URL` at Postgres for durable history.
+Backend history is stored in Neon Postgres, not the container filesystem. The
+control plane uses the `voicefirst` database in the same Neon project as auth;
+Better Auth stays in `neondb`. Both are free-plan Neon databases, so they
+survive Render redeploys, restarts, and free-tier sleep.
+
+On startup, `Database.create_all()` creates any missing tables (21 today) and
+adds model columns that are not yet present. The schema-evolution probe is
+dialect-aware and each `ALTER TABLE` runs in a savepoint, so a failed change on
+PostgreSQL cannot abort the surrounding transaction and roll back `create_all`.
+
+Verified on 2026-10-25: a chat turn created conversation
+`conv_46f2d959cbc34092` with two messages, a full Render rebuild
+(`dep-dbes0oss728c73d8flhg`) came up `live`, and the conversation and messages
+were still returned by `/api/conversations/{id}` and present in Neon.
+
+The old SQLite file at `/data/voicefirst.db` is **not** migrated. Conversations
+created before the switch remain in the retired SQLite volume; only data created
+after the Postgres cutover is durable.
+
+## Demo account
+
+A dedicated demo admin is provisioned in production:
+
+- Email: `demo@openvoiceai.app`
+- Role: `admin` (Better Auth `role` column in `neondb.public."user"`)
+- Password: shared privately with the project owner; never commit it here
+
+The account is email-verified and can use chat, voice, projects, approvals, and
+Agent Studio. To rotate it, sign in, change the password, or update the role in
+Neon.
 
 ## Post-deploy checklist
 
@@ -114,8 +155,8 @@ curl -i https://<service>.onrender.com/health
 curl -i https://openvoiceai.vercel.app/api/auth/jwks
 ```
 
-Then open the site, create an account, and start a voice session. Browser mic
-access requires HTTPS (Vercel provides it).
+Then open the site and sign in with the demo account (or create a new one), and
+start a voice session. Browser mic access requires HTTPS (Vercel provides it).
 
 ## Production verification (2026-10-25)
 
@@ -145,6 +186,23 @@ Checked against the live deployment, not just locally:
   connected in 673 ms, user and assistant transcripts streamed, 38 speech
   frames arrived, and no errors were reported.
 
+### Postgres cutover (2026-10-25)
+
+- Backend suite: **175 passed** after making schema evolution dialect-aware.
+- Created Neon database `voicefirst`; startup created all **21 tables**.
+- Set Render `VOICEFIRST_DATABASE_URL` to the unpooled Neon DSN and deployed
+  `7f32a3f`; health returned `200`.
+- Created the demo admin (`demo@openvoiceai.app`), signed in through Vercel,
+  confirmed the JWT carried `role: admin`, and listed conversations with it.
+- Sent a chat turn: conversation `conv_46f2d959cbc34092`, two messages, one run,
+  all visible in Neon.
+- Triggered a full Render rebuild (`dep-dbes0oss728c73d8flhg`), waited for
+  `live`, and re-listed conversations: the same conversation and both messages
+  were returned. Data now survives redeploys.
+- Re-ran the production voice probe with the demo admin after the switch:
+  realtime Gemini connected in 700 ms, user and assistant transcripts streamed,
+  15 speech frames arrived, and no errors were reported.
+
 ## Troubleshooting
 
 - **Sign-up 500 on Vercel** — `DATABASE_URL` missing or the Neon integration
@@ -155,3 +213,12 @@ Checked against the live deployment, not just locally:
   errors; `VOICEFIRST_REALTIME_MODEL` must be a realtime-capable model.
 - **WebSocket closes immediately** — the JWT must be valid against the JWKS URL
   configured on the backend. Verify `/api/auth/token` returns a token.
+- **Backend healthy but conversations disappear** — confirm
+  `VOICEFIRST_DATABASE_URL` points at `/voicefirst` with `?ssl=require`; the
+  container falls back to ephemeral SQLite when it is unset.
+- **Env var changed but no new deploy** — with `autoDeployTrigger: commit`,
+  env-var edits do not deploy. Trigger a deploy (dashboard or
+  `POST /v1/services/{id}/deploys`).
+- **`Missing or null Origin` from Better Auth** — scripted sign-ins must send an
+  `Origin: https://openvoiceai.vercel.app` header; browsers send it
+  automatically.

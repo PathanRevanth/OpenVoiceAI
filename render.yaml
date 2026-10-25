@@ -3,8 +3,10 @@
 # Deploy: https://render.com/deploy?repo=https://github.com/PathanRevanth/OpenVoiceAI
 #
 # Vercel cannot host this service: it needs long-lived WebSockets, background
-# research runs, and a writable SQLite volume. Render's free web service
+# research runs, and a long-running container. Render's free web service
 # supports all three and redeploys automatically on every push to `master`.
+# Backend persistence is Neon Postgres via VOICEFIRST_DATABASE_URL, which is
+# set on the service rather than here because it contains a credential.
 services:
   - type: web
     name: openvoiceai-backend
