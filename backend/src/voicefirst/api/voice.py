@@ -350,7 +350,9 @@ async def voice_ws(ws: WebSocket) -> None:
         {
             "type": "state",
             "data": {
-                "mode": "realtime" if settings.has_realtime_key else "browser-fallback",
+                # Informational only. The mode is decided when the client sends
+                # `start`, because it depends on the caller's own connection.
+                "phase": "connected",
                 "realtime_model": settings.realtime_model,
                 "user": {"id": identity.policy.user_id, "role": identity.policy.role},
             },

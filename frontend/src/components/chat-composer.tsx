@@ -7,7 +7,9 @@
  * - frosted-glass shell (deep backdrop blur, sheen, inner highlight)
  * - agent/model-style selector: talk to the orchestrator ("Auto") or address a
  *   specialist directly, exactly like picking a model
- * - attachments (images / PDF / text, max 4) with thumbnail chips + paste support
+ * - attachments (images, PDF, audio, video, text, Office docs; max 4) with
+ *   thumbnails, drag/drop, and paste support
+ * - live voice transcript mirrored into the textarea while the user speaks
  * - voice orb, auto-growing textarea, Enter-to-send
  */
 
@@ -47,8 +49,137 @@ const EFFORT_LABEL: Record<ReasoningEffort, string> = {
 };
 
 const MAX_ATTACHMENTS = 4;
-const MAX_FILE_BYTES = 3.5 * 1024 * 1024;
-const ACCEPTED = /^(image\/|application\/pdf|text\/)/;
+const MAX_FILE_BYTES = 6 * 1024 * 1024;
+
+const ACCEPTED = new RegExp(
+  "^(?:" +
+    "image/(?:jpeg|png|gif|webp)" +
+    "|application/pdf" +
+    "|text/[A-Za-z0-9.+-]+" +
+    "|audio/(?:wav|mpeg|mp3|ogg|flac|aiff|aac|mp4|webm)" +
+    "|video/(?:mp4|webm|quicktime|x-matroska|mpeg)" +
+    "|application/(?:json|xml|javascript|x-javascript|typescript|x-yaml|yaml|sql|graphql)" +
+    "|application/vnd\\.openxmlformats-officedocument\\." +
+    "(?:wordprocessingml\\.document|spreadsheetml\\.sheet|presentationml\\.presentation)" +
+    "|application/msword|application/vnd\\.ms-excel|application/vnd\\.ms-powerpoint" +
+    ")$",
+  "i",
+);
+
+const ACCEPT_ATTR = [
+  "image/*",
+  "application/pdf",
+  "text/*",
+  "audio/*",
+  "video/mp4",
+  "video/webm",
+  ".docx",
+  ".xlsx",
+  ".pptx",
+  ".doc",
+  ".xls",
+  ".ppt",
+  ".csv",
+  ".json",
+  ".md",
+  ".html",
+  ".js",
+  ".ts",
+  ".py",
+].join(",");
+
+const EXTENSION_TYPES: Record<string, string> = {
+  png: "image/png",
+  jpg: "image/jpeg",
+  jpeg: "image/jpeg",
+  gif: "image/gif",
+  webp: "image/webp",
+  heic: "image/heic",
+  heif: "image/heif",
+  avif: "image/avif",
+  bmp: "image/bmp",
+  tif: "image/tiff",
+  tiff: "image/tiff",
+  pdf: "application/pdf",
+  txt: "text/plain",
+  md: "text/markdown",
+  csv: "text/csv",
+  json: "application/json",
+  html: "text/html",
+  htm: "text/html",
+  css: "text/css",
+  js: "text/javascript",
+  mjs: "text/javascript",
+  ts: "text/typescript",
+  tsx: "text/typescript",
+  jsx: "text/javascript",
+  py: "text/x-python",
+  rb: "text/x-ruby",
+  go: "text/x-go",
+  rs: "text/x-rust",
+  java: "text/x-java",
+  sh: "text/x-shellscript",
+  yml: "application/yaml",
+  yaml: "application/yaml",
+  xml: "application/xml",
+  sql: "application/sql",
+  docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  xlsx: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  pptx: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+  doc: "application/msword",
+  xls: "application/vnd.ms-excel",
+  ppt: "application/vnd.ms-powerpoint",
+  mp3: "audio/mpeg",
+  wav: "audio/wav",
+  ogg: "audio/ogg",
+  flac: "audio/flac",
+  m4a: "audio/mp4",
+  aac: "audio/aac",
+  mp4: "video/mp4",
+  webm: "video/webm",
+  mov: "video/quicktime",
+  mkv: "video/x-matroska",
+};
+
+function mediaTypeFor(file: File): string {
+  if (file.type) return file.type;
+  const ext = file.name.split(".").pop()?.toLowerCase() ?? "";
+  return EXTENSION_TYPES[ext] ?? "";
+}
+
+function isImage(mediaType: string): boolean {
+  return mediaType.startsWith("image/");
+}
+
+/** Downscale an image so the thread can persist a thumbnail without storing
+ * the full upload in the message row. */
+async function imageThumbnail(file: File): Promise<string | undefined> {
+  try {
+    const bitmap = await createImageBitmap(file);
+    const max = 512;
+    const scale = Math.min(1, max / Math.max(bitmap.width, bitmap.height));
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.max(1, Math.round(bitmap.width * scale));
+    canvas.height = Math.max(1, Math.round(bitmap.height * scale));
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return undefined;
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+    bitmap.close?.();
+    return canvas.toDataURL("image/jpeg", 0.82);
+  } catch {
+    return undefined;
+  }
+}
+
+function attachmentIcon(mediaType: string): Parameters<typeof Icon>[0]["name"] {
+  if (isImage(mediaType)) return "photo";
+  if (mediaType.startsWith("audio/")) return "audio";
+  if (mediaType.startsWith("video/")) return "presentation";
+  if (mediaType === "application/pdf") return "scroll";
+  return "file";
+}
 
 const AGENT_ICONS: Record<string, Parameters<typeof Icon>[0]["name"]> = {
   orchestrator: "bot",
@@ -69,6 +200,7 @@ function shortModelName(name: string): string {
 
 interface ComposerAttachment extends ChatAttachmentInput {
   previewUrl?: string;
+  size?: number;
 }
 
 function agentIcon(slug: string | null): Parameters<typeof Icon>[0]["name"] {
@@ -81,25 +213,56 @@ function formatBytes(n: number): string {
   return `${(n / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-async function fileToAttachment(file: File): Promise<ComposerAttachment | string> {
-  if (!ACCEPTED.test(file.type)) {
-    return `${file.name}: unsupported type (images, PDF, or text only)`;
-  }
-  if (file.size > MAX_FILE_BYTES) {
-    return `${file.name}: too large (max ${formatBytes(MAX_FILE_BYTES)})`;
-  }
-  const dataUrl = await new Promise<string>((resolve, reject) => {
+/** Formats the model APIs accept directly. Other decodable images (HEIC,
+ * AVIF, BMP, TIFF) are converted to a JPEG rendition on the client. */
+const DIRECT_IMAGE = /^image\/(?:jpeg|png|gif|webp)$/i;
+
+function readAsDataUrl(file: File): Promise<string> {
+  return new Promise<string>((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = () => resolve(String(reader.result));
     reader.onerror = () => reject(new Error("read failed"));
     reader.readAsDataURL(file);
   });
+}
+
+async function fileToAttachment(file: File): Promise<ComposerAttachment | string> {
+  const mediaType = mediaTypeFor(file);
+  const imageLike = mediaType.startsWith("image/");
+  if (!mediaType || (!ACCEPTED.test(mediaType) && !imageLike)) {
+    return `${file.name}: unsupported type. Add images, PDF, audio, video, text, or Office files.`;
+  }
+  if (file.size > MAX_FILE_BYTES) {
+    return `${file.name}: too large (max ${formatBytes(MAX_FILE_BYTES)})`;
+  }
+
+  if (imageLike && !DIRECT_IMAGE.test(mediaType)) {
+    // The browser may decode HEIC/AVIF/BMP/TIFF even though chat models do not.
+    // Send a 512px JPEG rendition instead of rejecting the photo outright.
+    const converted = await imageThumbnail(file);
+    if (!converted) {
+      return `${file.name}: this image format is not supported. Save it as PNG or JPEG.`;
+    }
+    return {
+      name: file.name,
+      media_type: "image/jpeg",
+      data: converted.slice(converted.indexOf(",") + 1),
+      preview: converted,
+      previewUrl: converted,
+      size: file.size,
+    };
+  }
+
+  const dataUrl = await readAsDataUrl(file);
   const base64 = dataUrl.slice(dataUrl.indexOf(",") + 1);
+  const preview = isImage(mediaType) ? await imageThumbnail(file) : undefined;
   return {
     name: file.name,
-    media_type: file.type || "text/plain",
+    media_type: mediaType,
     data: base64,
-    previewUrl: file.type.startsWith("image/") ? dataUrl : undefined,
+    preview,
+    previewUrl: preview ?? (isImage(mediaType) ? dataUrl : undefined),
+    size: file.size,
   };
 }
 
@@ -118,9 +281,12 @@ export function ChatComposer({
   voiceModel,
   onVoiceModelChange,
   draftKey,
+  liveTranscript,
 }: {
   busy: boolean;
   voiceMode: OrbMode;
+  /** Latest user speech from the live voice session; mirrors into the textarea. */
+  liveTranscript: string | null;
   onSend: (message: string, attachments: ChatAttachmentInput[], agent: string | null) => void;
   onVoiceToggle: () => void;
   plan: PlanCardState | null;
@@ -153,6 +319,7 @@ export function ChatComposer({
   const [templates, setTemplates] = useState<PromptTemplate[]>([]);
   const [newTitle, setNewTitle] = useState("");
   const [newBody, setNewBody] = useState("");
+  const [dragging, setDragging] = useState(false);
 
   const openTools = useCallback((view: ToolsView) => {
     setToolsView(view);
@@ -220,6 +387,40 @@ export function ChatComposer({
       /* storage unavailable */
     }
   }, [draftKey]);
+
+  // Live voice transcription: mirror the caller's words into the composer.
+  // Any text that was already typed becomes a prefix and is restored when the
+  // voice turn ends, so dictation never destroys an unsent draft.
+  const liveBaseRef = useRef<string | null>(null);
+  const liveLastRef = useRef("");
+  useEffect(() => {
+    if (liveTranscript === null) {
+      if (liveBaseRef.current === null) return;
+      const base = liveBaseRef.current;
+      const spoken = liveLastRef.current;
+      const merged = base.trim() ? `${base.trimEnd()} ${spoken}` : spoken;
+      liveBaseRef.current = null;
+      liveLastRef.current = "";
+      setInput((prev) => (prev === merged ? base : prev));
+      window.setTimeout(() => {
+        if (textareaRef.current) {
+          textareaRef.current.style.height = "auto";
+          textareaRef.current.style.height = `${Math.min(textareaRef.current.scrollHeight, 160)}px`;
+        }
+      }, 20);
+      return;
+    }
+    if (liveBaseRef.current === null) liveBaseRef.current = inputRef.current;
+    const base = liveBaseRef.current;
+    liveLastRef.current = liveTranscript;
+    setInput(base.trim() ? `${base.trimEnd()} ${liveTranscript}` : liveTranscript);
+    window.setTimeout(() => {
+      if (textareaRef.current) {
+        textareaRef.current.style.height = "auto";
+        textareaRef.current.style.height = `${Math.min(textareaRef.current.scrollHeight, 160)}px`;
+      }
+    }, 20);
+  }, [liveTranscript]);
 
   // Recently used models, pinned to the top of the picker.
   const [recentIds, setRecentIds] = useState<string[]>(() => {
@@ -472,6 +673,15 @@ export function ChatComposer({
     backend.deletePrompt(id).catch(() => {});
   }, []);
 
+  const toggleWebSearch = useCallback(() => {
+    const next = !webSearch;
+    setWebSearch(next);
+    // Web search routes through the Research specialist. Clear an explicitly
+    // selected specialist so the toggle always does what its chip says.
+    if (next) setAgentSlug(null);
+    else setAgentSlug((slug) => (slug === "research" ? null : slug));
+  }, [webSearch]);
+
   const voiceHint = !voiceCapable
     ? (providerMeta?.reason ?? "Voice unavailable for this provider")
     : !voiceAvailable
@@ -483,7 +693,7 @@ export function ChatComposer({
     setView: setToolsView,
     close: closeTools,
     webSearch,
-    onToggleSearch: () => setWebSearch((v) => !v),
+    onToggleSearch: toggleWebSearch,
     uploadDisabled: attachments.length >= MAX_ATTACHMENTS,
     onUpload: () => {
       closeTools();
@@ -593,6 +803,9 @@ export function ChatComposer({
   };
 
   const voiceActive = voiceMode !== "idle";
+  // Web search is implemented by the Research specialist, so it also drives the
+  // agent pill when no specialist was picked explicitly.
+  const activeAgent = agentSlug ?? (webSearch ? "research" : null);
   // The live to-do panel rides on the composer for the whole execution
   // lifecycle (approval itself happens on the Plan card in the thread).
   const planPanel =
@@ -623,16 +836,59 @@ export function ChatComposer({
         }}
       >
       <div
+        onDragEnter={(e) => {
+          if (e.dataTransfer.types.includes("Files")) {
+            e.preventDefault();
+            setDragging(true);
+          }
+        }}
+        onDragOver={(e) => {
+          if (e.dataTransfer.types.includes("Files")) {
+            e.preventDefault();
+            e.dataTransfer.dropEffect = "copy";
+            setDragging(true);
+          }
+        }}
+        onDragLeave={(e) => {
+          // dragleave also fires when moving between children; only clear when
+          // the pointer actually leaves the composer.
+          const next = e.relatedTarget as Node | null;
+          if (!next || !e.currentTarget.contains(next)) setDragging(false);
+        }}
+        onDrop={(e) => {
+          e.preventDefault();
+          setDragging(false);
+          void addFiles(e.dataTransfer.files);
+        }}
         className={
-          "border border-[var(--hairline)] bg-[var(--sidebar)] p-2 shadow-[var(--shadow-card)] " +
+          "relative border border-[var(--hairline)] bg-[var(--sidebar)] p-2 shadow-[var(--shadow-card)] " +
           (planPanel
             ? "rounded-b-[26px] rounded-t-none border-t-0"
             : "rounded-[28px]")
         }
       >
+        {dragging && (
+          <div className="pointer-events-none absolute inset-1 z-20 grid place-items-center rounded-[24px] border-2 border-dashed border-[var(--accent-border)] bg-[var(--bg-raised)]/95">
+            <span className="flex items-center gap-2 text-[13px] font-medium text-[var(--text-1)]">
+              <Icon name="plus" size={15} className="text-[var(--accent)]" />
+              Drop files to attach
+            </span>
+          </div>
+        )}
         {/* active-state chips (agent selection lives in the pill) + attachment chips */}
-        {(instructions || attachments.length > 0) && (
+        {(instructions || webSearch || attachments.length > 0) && (
         <div className="flex flex-wrap items-center gap-1.5 px-2.5 pb-2 pt-1.5">
+          {webSearch && (
+            <button
+              type="button"
+              onClick={() => setWebSearch(false)}
+              title="Web search is on for this message"
+              className="press fluid flex items-center gap-1.5 rounded-full border border-[var(--accent-border)] bg-[var(--accent-dim)] px-2.5 py-1 text-[11px] font-medium text-[var(--text-1)]"
+            >
+              <Icon name="globe" size={12} className="text-[var(--accent)]" />
+              Web search on
+            </button>
+          )}
           {instructions && (
             <button
               type="button"
@@ -654,14 +910,21 @@ export function ChatComposer({
           {attachments.map((a, i) => (
             <span
               key={`${a.name}-${i}`}
+              title={`${a.name}${a.size ? ` · ${formatBytes(a.size)}` : ""}`}
               className="fluid flex items-center gap-1.5 rounded-full border border-[var(--hairline)] bg-[var(--bg-raised)]/60 py-1 pl-1.5 pr-1 text-[11px] text-[var(--text-2)]"
             >
               {a.previewUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element -- local data URL thumbnail
                 <img src={a.previewUrl} alt="" className="h-5 w-5 rounded-full object-cover" />
               ) : (
-                <Icon name="scroll" size={12} className="text-[var(--text-3)]" />
+                <Icon name={attachmentIcon(a.media_type)} size={12} className="text-[var(--text-3)]" />
               )}
               <span className="max-w-[110px] truncate">{a.name}</span>
+              {a.size && (
+                <span className="shrink-0 font-mono text-[9.5px] tabular text-[var(--text-3)]">
+                  {formatBytes(a.size)}
+                </span>
+              )}
               <button
                 type="button"
                 aria-label={`Remove ${a.name}`}
@@ -676,7 +939,22 @@ export function ChatComposer({
         )}
 
         {/* white input card */}
-        <div className="rounded-[22px] border border-[var(--hairline)] bg-[var(--bg-raised)] px-4 pb-2.5 pt-3.5">
+        <div
+          className={`rounded-[22px] border bg-[var(--bg-raised)] px-4 pb-2.5 pt-3.5 transition-colors ${
+            voiceActive
+              ? "border-[var(--accent-border)] shadow-[0_0_0_3px_var(--accent-dim)]"
+              : "border-[var(--hairline)]"
+          }`}
+        >
+        {liveTranscript && (
+          <p className="mb-1 flex items-center gap-1.5 px-1.5 text-[10.5px] font-medium uppercase tracking-[0.1em] text-[var(--accent)]">
+            <span className="relative flex h-1.5 w-1.5">
+              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[var(--accent)] opacity-60" />
+              <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-[var(--accent)]" />
+            </span>
+            Live transcript
+          </p>
+        )}
         {/* bottom row: plus · search · model · mic · send */}
         <div className="relative">
           {showSlash && slashMatches.length > 0 && (
@@ -719,7 +997,9 @@ export function ChatComposer({
                   ? "Speaking — interrupt anytime"
                   : voiceMode === "thinking"
                     ? "Thinking…"
-                    : "Listening…"
+                    : voiceMode === "connecting"
+                      ? "Connecting microphone…"
+                      : "Listening…"
                 : "Ask anything..."
           }
           className="max-h-40 min-h-[44px] w-full resize-none bg-transparent px-1.5 py-2 text-[15px] leading-relaxed outline-none placeholder:text-[var(--text-3)]"
@@ -781,17 +1061,21 @@ export function ChatComposer({
                 aria-label="Select agent"
                 aria-expanded={searchOpen}
                 className={`press fluid flex h-8 shrink-0 items-center gap-1.5 rounded-full border px-2.5 text-[13px] ${
-                  agentSlug
+                  activeAgent
                     ? "border-[var(--accent-border)] bg-[var(--accent-dim)] font-medium text-[var(--text-1)]"
                     : "border-[var(--hairline)] text-[var(--text-2)] hover:border-[var(--hairline-strong)] hover:text-[var(--text-1)]"
                 }`}
               >
-                {agentMark(agentSlug) ? (
-                  <AgentLogo slug={agentSlug ?? ""} size={15} />
+                {agentMark(activeAgent) ? (
+                  <AgentLogo slug={activeAgent ?? ""} size={15} />
                 ) : (
-                  <Icon name={agentIcon(agentSlug)} size={13} className={agentSlug ? "text-[var(--accent)]" : ""} />
+                  <Icon
+                    name={activeAgent === "research" && webSearch ? "globe" : agentIcon(activeAgent)}
+                    size={13}
+                    className={activeAgent ? "text-[var(--accent)]" : ""}
+                  />
                 )}
-                <span>{agentSlug ? (selected?.name ?? agentSlug) : "Orchestrator"}</span>
+                <span>{agentSlug ? (selected?.name ?? agentSlug) : webSearch ? "Web search" : "Orchestrator"}</span>
                 <Icon
                   name="chevron"
                   size={12}
@@ -807,6 +1091,25 @@ export function ChatComposer({
               <ToolsMenuBody variant="search" menu={menuCtx} />
             </PopoverContent>
           </Popover>
+          <Tip
+            label={webSearch ? "Web search on" : "Web search"}
+            hint="Research with cited sources"
+            align="center"
+          >
+            <button
+              type="button"
+              aria-label="Toggle web search"
+              aria-pressed={webSearch}
+              onClick={toggleWebSearch}
+              className={`press fluid grid h-8 w-8 shrink-0 place-items-center rounded-full border ${
+                webSearch
+                  ? "border-[var(--accent-border)] bg-[var(--accent-dim)] text-[var(--accent)]"
+                  : "border-transparent text-[var(--text-2)] hover:bg-[var(--panel-hover)] hover:text-[var(--text-1)]"
+              }`}
+            >
+              <Icon name="globe" size={14} />
+            </button>
+          </Tip>
           <span className="min-w-0 flex-1" />
           {/* Model */}
           <ModelSelectorTrigger
@@ -918,7 +1221,7 @@ export function ChatComposer({
           ref={fileInputRef}
           type="file"
           multiple
-          accept="image/*,application/pdf,text/*"
+          accept={ACCEPT_ATTR}
           className="hidden"
           onChange={(e) => {
             void addFiles(e.target.files);
@@ -1211,6 +1514,13 @@ function ToolsMenuBody({ variant, menu }: { variant: "plus" | "search"; menu: To
         label="Add files or photos"
         hint={menu.uploadDisabled ? "Max reached" : undefined}
         onClick={menu.onUpload}
+      />
+      <ToolsItem
+        icon="globe"
+        label="Web search"
+        hint={menu.webSearch ? "On" : undefined}
+        checked={menu.webSearch}
+        onClick={menu.onToggleSearch}
       />
       <ToolsItem
         icon="waveform"

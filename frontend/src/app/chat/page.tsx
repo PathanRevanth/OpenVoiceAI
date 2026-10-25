@@ -81,7 +81,7 @@ type Block = (
 )[];
 
 interface VoiceState {
-  mode: "idle" | "listening" | "thinking" | "speaking" | "fallback";
+  mode: "idle" | "connecting" | "listening" | "thinking" | "speaking" | "fallback";
   info?: string;
 }
 
@@ -93,6 +93,9 @@ function AssistantInner() {
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [voice, setVoice] = useState<VoiceState>({ mode: "idle" });
+  /** Latest user speech while a voice turn is still in progress. Mirrored into
+   * the composer textarea; cleared as soon as the turn is finalized. */
+  const [liveTranscript, setLiveTranscript] = useState<string | null>(null);
   const [pendingApprovals, setPendingApprovals] = useState<Approval[]>([]);
   const [plan, setPlan] = useState<PlanCardState | null>(null);
   // Composer selections: chat model (pydantic-ai string) + realtime voice id.
@@ -162,8 +165,16 @@ function AssistantInner() {
   /** Highest finalized transcript index per speaker (cancelled tails are dropped). */
   const finalizedIdxRef = useRef<{ user: number; assistant: number }>({ user: -1, assistant: -1 });
   const processorRef = useRef<AudioWorkletNode | null>(null);
-  const recogRef = useRef<{ stop: () => void } | null>(null);
-  const voiceModeRef = useRef<"idle" | "listening" | "thinking" | "speaking" | "fallback">("idle");
+  const recogRef = useRef<SpeechRecognitionLike | null>(null);
+  const recogRestartRef = useRef<number | null>(null);
+  const fallbackFinalRef = useRef("");
+  /** Re-arms browser speech recognition after the spoken reply finishes. */
+  const armFallbackRef = useRef<(() => void) | null>(null);
+  /** True while browser speech synthesis is reading the reply aloud. */
+  const fallbackSpeakingRef = useRef(false);
+  /** Invalidates an in-flight startVoice() when the user stops or restarts. */
+  const voiceStartRef = useRef(0);
+  const voiceModeRef = useRef<VoiceState["mode"]>("idle");
   const pausedRunRef = useRef<string | null>(null);
   const lastRunIdRef = useRef<string | null>(null);
   const pendingModelRef = useRef<string | null>(null);
@@ -193,6 +204,15 @@ function AssistantInner() {
     // same index are the provider's cancelled tail — they were never heard.
     if (idx !== null && idx <= finalizedIdxRef.current[role]) return;
     const startsNew = idx !== null ? idx !== liveIdxRef.current[role] : liveIdxRef.current[role] === null;
+    if (startsNew) {
+      // A new turn from either speaker closes the other speaker's caption.
+      const other = role === "user" ? "assistant" : "user";
+      const otherIdx = liveIdxRef.current[other];
+      if (otherIdx !== null) {
+        finalizedIdxRef.current[other] = Math.max(finalizedIdxRef.current[other], otherIdx);
+        liveIdxRef.current[other] = null;
+      }
+    }
     liveIdxRef.current[role] = idx;
     setTurns((prev) => {
       const next = prev.map((t) => (t.live && t.role !== role ? { ...t, live: false } : t));
@@ -211,12 +231,22 @@ function AssistantInner() {
     });
   }, []);
 
-  const finalizeLiveTurns = useCallback(() => {
+  /** Close live captions. Pass a speaker to finalize only that turn. */
+  const finalizeLiveTurns = useCallback((only?: "user" | "assistant") => {
     const { user, assistant } = liveIdxRef.current;
-    if (user !== null) finalizedIdxRef.current.user = Math.max(finalizedIdxRef.current.user, user);
-    if (assistant !== null) finalizedIdxRef.current.assistant = Math.max(finalizedIdxRef.current.assistant, assistant);
-    liveIdxRef.current = { user: null, assistant: null };
-    setTurns((prev) => (prev.some((t) => t.live) ? prev.map((t) => (t.live ? { ...t, live: false } : t)) : prev));
+    if ((only === undefined || only === "user") && user !== null) {
+      finalizedIdxRef.current.user = Math.max(finalizedIdxRef.current.user, user);
+      liveIdxRef.current.user = null;
+    }
+    if ((only === undefined || only === "assistant") && assistant !== null) {
+      finalizedIdxRef.current.assistant = Math.max(finalizedIdxRef.current.assistant, assistant);
+      liveIdxRef.current.assistant = null;
+    }
+    setTurns((prev) =>
+      prev.some((t) => t.live && (only === undefined || t.role === only))
+        ? prev.map((t) => (t.live && (only === undefined || t.role === only) ? { ...t, live: false } : t))
+        : prev,
+    );
   }, []);
 
   // --- live plan: official Plan card in the thread + to-do panel at the composer ---
@@ -612,7 +642,9 @@ function AssistantInner() {
         attachments: (attachments ?? []).map((a) => ({
           name: a.name,
           media_type: a.media_type,
-          ...(a.previewUrl ? { preview: a.previewUrl } : {}),
+          // Only the small rendered thumbnail is persisted; previewUrl is a
+          // local full-size data URL for the optimistic chip.
+          ...(a.preview ? { preview: a.preview } : {}),
         })),
       });
       try {
@@ -699,10 +731,21 @@ function AssistantInner() {
     await sendText(lastUser.text);
   }, [turns, busy, sendText]);
 
-  const speak = useCallback((text: string) => {
-    if (typeof speechSynthesis === "undefined") return;
+  const speak = useCallback((text: string, onDone?: () => void) => {
+    if (typeof speechSynthesis === "undefined") {
+      onDone?.();
+      return;
+    }
     const utter = new SpeechSynthesisUtterance(text.slice(0, 600));
     utter.rate = 1.05;
+    let finished = false;
+    const finish = () => {
+      if (finished) return;
+      finished = true;
+      onDone?.();
+    };
+    utter.onend = finish;
+    utter.onerror = finish;
     speechSynthesis.speak(utter);
   }, []);
 
@@ -760,6 +803,38 @@ function AssistantInner() {
 
   // --- voice: WebSocket mic streaming + browser fallbacks ---
   const stopVoice = useCallback(() => {
+    // Invalidate any startVoice() still awaiting permission or the handshake.
+    voiceStartRef.current += 1;
+    // Mark idle first so a recognition onend handler cannot restart itself.
+    voiceModeRef.current = "idle";
+    armFallbackRef.current = null;
+    fallbackSpeakingRef.current = false;
+    try {
+      if (typeof speechSynthesis !== "undefined") speechSynthesis.cancel();
+    } catch {
+      /* speech synthesis unavailable */
+    }
+
+    if (recogRestartRef.current !== null) {
+      window.clearTimeout(recogRestartRef.current);
+      recogRestartRef.current = null;
+    }
+    const recog = recogRef.current;
+    if (recog) {
+      try {
+        recog.abort?.();
+      } catch {
+        /* already stopped */
+      }
+      try {
+        recog.stop();
+      } catch {
+        /* already stopped */
+      }
+    }
+    recogRef.current = null;
+    fallbackFinalRef.current = "";
+
     processorRef.current?.port.close();
     processorRef.current?.disconnect();
     processorRef.current = null;
@@ -776,29 +851,96 @@ function AssistantInner() {
     playerIdleRef.current = true;
     liveIdxRef.current = { user: null, assistant: null };
     finalizedIdxRef.current = { user: -1, assistant: -1 };
-    recogRef.current?.stop();
-    recogRef.current = null;
-    try {
-      wsRef.current?.send(JSON.stringify({ type: "stop" }));
-    } catch {
-      /* socket already closed */
+
+    const ws = wsRef.current;
+    wsRef.current = null;
+    if (ws) {
+      // Detach first: closing the socket must not re-enter stopVoice().
+      ws.onclose = null;
+      ws.onmessage = null;
+      try {
+        if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: "stop" }));
+      } catch {
+        /* socket already closed */
+      }
+      try {
+        ws.close();
+      } catch {
+        /* already closed */
+      }
     }
-    voiceModeRef.current = "idle";
+
+    setLiveTranscript(null);
     finalizeLiveTurns();
     setVoice({ mode: "idle" });
   }, [finalizeLiveTurns]);
 
   const startVoice = useCallback(async () => {
+    const generation = ++voiceStartRef.current;
+    const stale = () => voiceStartRef.current !== generation;
+    voiceModeRef.current = "connecting";
+    setVoice({ mode: "connecting", info: "Requesting microphone access" });
+
+    let failStart: ((err: Error) => void) | null = null;
+
     try {
+      // 1. Microphone first. The click is still the active user gesture, so the
+      // browser shows its permission prompt instead of silently blocking it.
+      if (!navigator.mediaDevices?.getUserMedia) {
+        throw new Error(
+          "This browser cannot access the microphone here. Open the app over HTTPS in Chrome, Edge, or Safari.",
+        );
+      }
+      let mic: MediaStream;
+      try {
+        mic = await navigator.mediaDevices.getUserMedia({
+          audio: { echoCancellation: true, noiseSuppression: true, channelCount: 1 },
+        });
+      } catch (err) {
+        throw new Error(micErrorMessage(err));
+      }
+      if (stale()) {
+        mic.getTracks().forEach((t) => t.stop());
+        return;
+      }
+      mediaRef.current = mic;
+
+      // 2. Now open the voice socket. Render's free tier can take 30-60s to
+      // wake, so connectVoice() allows 30s for the handshake.
       const ws = await connectVoice();
+      if (stale()) {
+        ws.close();
+        mic.getTracks().forEach((t) => t.stop());
+        if (mediaRef.current === mic) mediaRef.current = null;
+        return;
+      }
       wsRef.current = ws;
+
       let outputRate = 24000;
       const startWaiters: Array<(frame: { type: string; data: Record<string, unknown> }) => void> = [];
+      const settleStart = (frame: { type: string; data: Record<string, unknown> }) => {
+        startWaiters.splice(0).forEach((resolve) => resolve(frame));
+      };
+
+      ws.onclose = () => {
+        if (wsRef.current !== ws) return;
+        wsRef.current = null;
+        ws.onclose = null;
+        failStart?.(new Error("Voice connection closed. Tap the mic to reconnect."));
+        const wasActive = voiceModeRef.current !== "idle";
+        stopVoice();
+        if (wasActive) {
+          addTurn({ role: "system", text: "voice: connection lost - tap the mic to reconnect." });
+        }
+      };
+
       ws.onmessage = (msg) => {
-        const frame = JSON.parse(msg.data as string) as {
-          type: string;
-          data: Record<string, unknown>;
-        };
+        let frame: { type: string; data: Record<string, unknown> };
+        try {
+          frame = JSON.parse(msg.data as string) as typeof frame;
+        } catch {
+          return;
+        }
         if (
           frame.type.startsWith("run.") ||
           frame.type.startsWith("text.") ||
@@ -825,7 +967,7 @@ function AssistantInner() {
             Boolean(frame.data.session_id) ||
             frame.data.mode === "browser-fallback" ||
             Boolean(frame.data.error);
-          if (sessionReady) startWaiters.splice(0).forEach((resolve) => resolve(frame));
+          if (sessionReady) settleStart(frame);
           const mode = frame.data.mode as string | undefined;
           if (mode === "realtime") {
             voiceModeRef.current = "listening";
@@ -846,16 +988,48 @@ function AssistantInner() {
           const speaker = frame.data.speaker;
           const text = String(frame.data.text ?? "");
           const isFinal = frame.data.final === true;
+          const index = typeof frame.data.index === "number" ? frame.data.index : null;
           if (text) {
             const role = speaker === "user" ? "user" : "assistant";
-            upsertLiveTurn(role, text, typeof frame.data.index === "number" ? frame.data.index : null);
-            if (isFinal) finalizeLiveTurns();
-            if (speaker === "user") {
+            // Ignore a cancelled tail that arrives after the turn finalized.
+            if (role === "user" && index !== null && index <= finalizedIdxRef.current.user) return;
+            upsertLiveTurn(role, text, index);
+            if (role === "user") {
+              // Mirror the caller's words into the composer while they speak.
+              setLiveTranscript(text);
               turnDoneRef.current = false;
               voiceModeRef.current = "listening";
               setVoice((v) => ({ ...v, mode: "listening", info: v.info }));
-            } else if (isFinal && voiceModeRef.current === "fallback") {
-              speak(text);
+            }
+            if (isFinal) {
+              finalizeLiveTurns(role);
+              if (role === "user") setLiveTranscript(null);
+            }
+            if (
+              role === "assistant" &&
+              isFinal &&
+              (voiceModeRef.current === "fallback" || voiceModeRef.current === "thinking")
+            ) {
+              // Browser fallback speaks through TTS. Stop listening so the mic
+              // cannot transcribe the assistant's own voice, then re-arm when
+              // the spoken reply ends. Mark speaking first so onend does not
+              // schedule an immediate restart.
+              fallbackSpeakingRef.current = true;
+              voiceModeRef.current = "speaking";
+              try {
+                recogRef.current?.stop();
+              } catch {
+                /* already stopped */
+              }
+              recogRef.current = null;
+              setVoice((v) => ({ ...v, mode: "speaking", info: v.info }));
+              speak(text, () => {
+                fallbackSpeakingRef.current = false;
+                if (voiceModeRef.current !== "speaking") return;
+                voiceModeRef.current = "fallback";
+                setVoice((v) => ({ ...v, mode: "fallback", info: v.info }));
+                armFallbackRef.current?.();
+              });
             }
           }
         } else if (frame.type === "speech") {
@@ -873,6 +1047,7 @@ function AssistantInner() {
           playerNodeRef.current?.port.postMessage("clear");
           playerIdleRef.current = true;
           turnDoneRef.current = false;
+          setLiveTranscript(null);
           finalizeLiveTurns();
           voiceModeRef.current = "listening";
           setVoice((v) => ({ ...v, mode: "listening", info: v.info }));
@@ -880,10 +1055,14 @@ function AssistantInner() {
           const state = String(frame.data.state ?? "");
           if (state === "speaking") {
             turnDoneRef.current = false;
+            setLiveTranscript(null);
+            // The caller's turn is over; keep any assistant caption open.
+            finalizeLiveTurns("user");
             voiceModeRef.current = "speaking";
             setVoice((v) => ({ ...v, mode: "speaking", info: v.info }));
           } else if (state === "done") {
             turnDoneRef.current = true;
+            setLiveTranscript(null);
             finalizeLiveTurns();
             refreshConversations();
             if (playerIdleRef.current) {
@@ -894,10 +1073,22 @@ function AssistantInner() {
           } else if (state === "listening") {
             turnDoneRef.current = false;
             playerIdleRef.current = true;
+            setLiveTranscript(null);
             finalizeLiveTurns();
             voiceModeRef.current = "listening";
             setVoice((v) => ({ ...v, mode: "listening", info: v.info }));
           }
+        } else if (frame.type === "turn.end") {
+          // Browser-fallback path: the orchestrator answered this utterance.
+          setLiveTranscript(null);
+          finalizeLiveTurns();
+          if (!fallbackSpeakingRef.current) {
+            voiceModeRef.current = "fallback";
+            setVoice((v) => ({ ...v, mode: "fallback", info: v.info }));
+            // The reply produced no spoken transcript: resume listening anyway.
+            if (!recogRef.current) armFallbackRef.current?.();
+          }
+          refreshConversations();
         }
       };
 
@@ -909,12 +1100,22 @@ function AssistantInner() {
       ws.send(JSON.stringify({ type: "start", data: startData }));
 
       const started = await new Promise<{ type: string; data: Record<string, unknown> }>((resolve, reject) => {
-        const timer = window.setTimeout(() => reject(new Error("voice session timed out")), 12_000);
+        const timer = window.setTimeout(
+          () => reject(new Error("The voice service is still waking up. Try again in a few seconds.")),
+          30_000,
+        );
+        failStart = (err) => {
+          window.clearTimeout(timer);
+          reject(err);
+        };
         startWaiters.push((frame) => {
           window.clearTimeout(timer);
+          failStart = null;
           resolve(frame);
         });
       });
+      failStart = null;
+      if (stale()) return;
 
       const mode = started.data.mode as string | undefined;
       if (started.data.error && mode !== "realtime") {
@@ -930,6 +1131,11 @@ function AssistantInner() {
         playbackCtxRef.current = playbackCtx;
         await playbackCtx.resume();
         await playbackCtx.audioWorklet.addModule("/pcm-player-processor.js");
+        if (stale()) {
+          playbackCtx.close().catch(() => {});
+          mic.getTracks().forEach((t) => t.stop());
+          return;
+        }
         const player = new AudioWorkletNode(playbackCtx, "pcm-player-processor");
         player.port.onmessage = (event: MessageEvent) => {
           if (event.data === "idle") {
@@ -947,10 +1153,6 @@ function AssistantInner() {
         liveIdxRef.current = { user: null, assistant: null };
         finalizedIdxRef.current = { user: -1, assistant: -1 };
 
-        const stream = await navigator.mediaDevices.getUserMedia({
-          audio: { echoCancellation: true, noiseSuppression: true, channelCount: 1 },
-        });
-        mediaRef.current = stream;
         // Capture natively at 16 kHz so every worklet frame is exactly one
         // 8 ms Gemini frame — no per-chunk resampling and 3x fewer WS messages.
         let audioCtx: AudioContext;
@@ -962,52 +1164,138 @@ function AssistantInner() {
         audioCtxRef.current = audioCtx;
         await audioCtx.resume();
         await audioCtx.audioWorklet.addModule("/pcm-worklet.js");
+        if (stale()) {
+          audioCtx.close().catch(() => {});
+          mic.getTracks().forEach((t) => t.stop());
+          return;
+        }
         const worklet = new AudioWorkletNode(audioCtx, "pcm-capture");
         processorRef.current = worklet;
         const fromRate = audioCtx.sampleRate;
         worklet.port.onmessage = (e: MessageEvent) => {
-          if (wsRef.current?.readyState === WebSocket.OPEN && e.data instanceof Float32Array) {
-            const pcm = resampleToPcm16(e.data, fromRate, inputRate);
-            wsRef.current.send(
-              JSON.stringify({ type: "pcm", data: arrayBufferToBase64(pcm.buffer as ArrayBuffer) }),
-            );
-          }
+          if (wsRef.current !== ws || ws.readyState !== WebSocket.OPEN || !(e.data instanceof Float32Array)) return;
+          const pcm = resampleToPcm16(e.data, fromRate, inputRate);
+          ws.send(JSON.stringify({ type: "pcm", data: arrayBufferToBase64(pcm.buffer as ArrayBuffer) }));
         };
-        audioCtx.createMediaStreamSource(stream).connect(worklet);
+        audioCtx.createMediaStreamSource(mic).connect(worklet);
         voiceModeRef.current = "listening";
         setVoice({ mode: "listening", info: "Gemini Live speech-to-speech" });
         return;
       }
 
+      // No server-side realtime provider: use the browser's speech engine.
       const SR =
         (window as unknown as { SpeechRecognition?: new () => SpeechRecognitionLike }).SpeechRecognition ??
         (window as unknown as { webkitSpeechRecognition?: new () => SpeechRecognitionLike })
           .webkitSpeechRecognition;
-      if (SR) {
+      if (!SR) {
+        throw new Error(
+          "This browser cannot transcribe speech. Use Chrome or Edge, or add a Gemini/OpenAI key on Connections for server speech-to-speech.",
+        );
+      }
+
+      // SpeechRecognition opens its own capture; release the permission probe.
+      mic.getTracks().forEach((t) => t.stop());
+      if (mediaRef.current === mic) mediaRef.current = null;
+
+      const armRecognition = (initial: boolean) => {
+        if (voiceModeRef.current !== "fallback") return;
         const recog = new SR();
         recog.lang = "en-US";
         recog.continuous = true;
-        recog.interimResults = false;
-        recog.onresult = (event: SpeechRecognitionResultLike) => {
-          const last = event.results.length - 1;
-          const text = last >= 0 ? event.results[last]?.[0]?.transcript : undefined;
-          if (text && wsRef.current?.readyState === WebSocket.OPEN) {
-            wsRef.current.send(JSON.stringify({ type: "text", data: text }));
+        recog.interimResults = true;
+        recog.onresult = (event: SpeechRecognitionEventLike) => {
+          // Only the armed fallback listener may consume results. Late events
+          // that arrive after the turn was handed off are ignored so they can
+          // neither re-open a finished turn nor talk over the spoken reply.
+          if (voiceModeRef.current !== "fallback") return;
+          let interim = "";
+          let finalText = "";
+          for (let i = event.resultIndex; i < event.results.length; i++) {
+            const result = event.results[i];
+            const transcript = result?.[0]?.transcript ?? "";
+            if (result?.isFinal) finalText += transcript;
+            else interim += transcript;
+          }
+          if (finalText) fallbackFinalRef.current += finalText;
+          const toSend = fallbackFinalRef.current.trim();
+          if (toSend) {
+            fallbackFinalRef.current = "";
+            setLiveTranscript(null);
+            // Move the finished utterance into the thread and hand it to the
+            // orchestrator, exactly like a realtime final transcript.
+            upsertLiveTurn("user", toSend, null);
+            finalizeLiveTurns("user");
+            // Stop listening while the reply is generated and spoken; turn.end
+            // or speech synthesis will arm it again. Mark thinking first so
+            // onend does not schedule a restart.
+            voiceModeRef.current = "thinking";
+            try {
+              recogRef.current?.stop();
+            } catch {
+              /* already stopped */
+            }
+            recogRef.current = null;
+            if (wsRef.current === ws && ws.readyState === WebSocket.OPEN) {
+              ws.send(JSON.stringify({ type: "text", data: toSend }));
+            }
+            setVoice((v) => ({ ...v, mode: "thinking", info: "Thinking about your request…" }));
+          } else {
+            const combined = `${fallbackFinalRef.current} ${interim}`.trim();
+            if (combined) setLiveTranscript(combined);
           }
         };
-        recog.start();
+        recog.onerror = (event: SpeechRecognitionErrorEventLike) => {
+          if (
+            event.error === "not-allowed" ||
+            event.error === "service-not-allowed" ||
+            event.error === "audio-capture"
+          ) {
+            addTurn({ role: "system", text: `voice: ${speechErrorMessage(event.error)}` });
+            stopVoice();
+          } else if (event.error === "network") {
+            addTurn({ role: "system", text: "voice: speech recognition lost its network connection; retrying." });
+          }
+        };
+        recog.onend = () => {
+          if (voiceModeRef.current !== "fallback") return;
+          if (recogRestartRef.current !== null) window.clearTimeout(recogRestartRef.current);
+          recogRestartRef.current = window.setTimeout(() => {
+            recogRestartRef.current = null;
+            if (voiceModeRef.current !== "fallback") return;
+            armRecognition(false);
+          }, 250);
+        };
         recogRef.current = recog;
-      }
+        try {
+          recog.start();
+        } catch (err) {
+          if (initial) throw err;
+        }
+      };
+      armFallbackRef.current = () => armRecognition(false);
+
       voiceModeRef.current = "fallback";
       setVoice({ mode: "fallback", info: String(started.data.info ?? "Browser speech mode") });
+      try {
+        armRecognition(true);
+      } catch (err) {
+        throw new Error(
+          `Browser speech recognition could not start (${err instanceof Error ? err.message : String(err)}). Allow microphone access and try again.`,
+        );
+      }
     } catch (err) {
-      addTurn({ role: "system", text: `voice unavailable: ${err instanceof Error ? err.message : err}` });
+      // A stop or restart while the permission prompt was open is not a failure.
+      if (stale()) return;
+      addTurn({ role: "system", text: `voice: ${err instanceof Error ? err.message : String(err)}` });
       stopVoice();
     }
   }, [addTurn, speak, stopVoice, refreshConversations, upsertLiveTurn, finalizeLiveTurns, selectedVoice, voiceModel, model, conversationId, applyRunEvent, setActiveId]);
 
   const role = user?.role ?? "viewer";
-  const isEmpty = turns.length === 0;
+  // A live user caption belongs in the composer, so it must not replace the
+  // big voice orb with an apparently empty thread.
+  const isEmpty = !turns.some((t) => !(t.role === "user" && t.live));
 
   // Collapse consecutive tool/specialist system lines into activity blocks.
   const blocks = useMemo<Block>(() => {
@@ -1020,6 +1308,8 @@ function AssistantInner() {
       }
     };
     turns.forEach((turn, idx) => {
+      // Live user speech lives in the composer until the turn is finalized.
+      if (turn.role === "user" && turn.live) return;
       const groupable =
         turn.role === "system" &&
         (turn.text.startsWith("tool:") || turn.text.startsWith("specialist:"));
@@ -1111,7 +1401,9 @@ function AssistantInner() {
                   ? "Go ahead — interrupt me anytime"
                   : voice.mode === "thinking"
                     ? "Thinking…"
-                    : "Listening — speak like you would to a colleague"}
+                    : voice.mode === "connecting"
+                      ? "Connecting to your microphone…"
+                      : "Listening — speak like you would to a colleague"}
             </h2>
             {demoMode && (
               <a
@@ -1280,6 +1572,7 @@ function AssistantInner() {
         voiceModel={voiceModel}
         onVoiceModelChange={setVoiceModel}
         draftKey={conversationId}
+        liveTranscript={liveTranscript}
       />
     </div>
     {artifactsOpen && artifacts.length > 0 && (
@@ -1849,14 +2142,72 @@ interface SpeechRecognitionLike {
   interimResults: boolean;
   start: () => void;
   stop: () => void;
-  onresult: ((event: SpeechRecognitionResultLike) => void) | null;
+  abort?: () => void;
+  onresult: ((event: SpeechRecognitionEventLike) => void) | null;
+  onerror: ((event: SpeechRecognitionErrorEventLike) => void) | null;
+  onend: (() => void) | null;
+}
+
+interface SpeechRecognitionAlternativeLike {
+  transcript: string;
 }
 
 interface SpeechRecognitionResultLike {
-  results: {
-    length: number;
-    [index: number]: { [index: number]: { transcript: string } };
-  };
+  isFinal: boolean;
+  length: number;
+  [index: number]: SpeechRecognitionAlternativeLike;
+}
+
+interface SpeechRecognitionResultListLike {
+  length: number;
+  [index: number]: SpeechRecognitionResultLike;
+}
+
+interface SpeechRecognitionEventLike {
+  resultIndex: number;
+  results: SpeechRecognitionResultListLike;
+}
+
+interface SpeechRecognitionErrorEventLike {
+  error: string;
+  message?: string;
+}
+
+/** Turn a getUserMedia failure into a message the caller can act on. */
+function micErrorMessage(err: unknown): string {
+  const name =
+    typeof err === "object" && err !== null && "name" in err
+      ? String((err as { name: unknown }).name)
+      : "";
+  switch (name) {
+    case "NotAllowedError":
+    case "SecurityError":
+      return "Microphone access is blocked. Click the mic icon in the address bar, allow the microphone for this site, then tap the mic again.";
+    case "NotFoundError":
+    case "DevicesNotFoundError":
+      return "No microphone was found. Connect a mic or headset, then tap the mic again.";
+    case "NotReadableError":
+    case "TrackStartError":
+      return "The microphone is busy in another app. Close it and tap the mic again.";
+    case "OverconstrainedError":
+      return "That microphone does not support the requested audio settings. Try another device.";
+    case "AbortError":
+      return "Microphone access was interrupted. Tap the mic to try again.";
+    default:
+      return err instanceof Error ? err.message : String(err);
+  }
+}
+
+function speechErrorMessage(code: string): string {
+  switch (code) {
+    case "not-allowed":
+    case "service-not-allowed":
+      return "Speech recognition is blocked. Allow microphone access for this site, then tap the mic again.";
+    case "audio-capture":
+      return "No working microphone was found. Connect a mic and try again.";
+    default:
+      return `speech recognition stopped (${code}). Tap the mic to retry.`;
+  }
 }
 
 function arrayBufferToBase64(buffer: ArrayBuffer): string {

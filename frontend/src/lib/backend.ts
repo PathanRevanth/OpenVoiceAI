@@ -258,7 +258,9 @@ export interface ChatAttachmentInput {
   name: string;
   media_type: string;
   data: string;
-  /** Local-only data URL for optimistic thumbnails; never sent to the API. */
+  /** Downscaled image thumbnail persisted with the message; safe to send. */
+  preview?: string;
+  /** Local-only full-size data URL for the composer chip; never sent. */
   previewUrl?: string;
 }
 
@@ -860,7 +862,19 @@ export async function connectVoice(): Promise<WebSocket> {
   const wsUrl = API_URL.replace(/^http/, "ws");
   const ws = new WebSocket(`${wsUrl}/api/voice/ws?token=${encodeURIComponent(token)}`);
   return new Promise((resolve, reject) => {
-    ws.onopen = () => resolve(ws);
-    ws.onerror = () => reject(new Error("Voice WebSocket failed"));
+    // Render's free tier can take 30-60s to wake. Give the socket enough time
+    // to complete its handshake instead of failing at the first idle second.
+    const timer = window.setTimeout(() => {
+      ws.close();
+      reject(new Error("Voice service is still waking up. Try again in a few seconds."));
+    }, 30_000);
+    ws.onopen = () => {
+      window.clearTimeout(timer);
+      resolve(ws);
+    };
+    ws.onerror = () => {
+      window.clearTimeout(timer);
+      reject(new Error("Voice WebSocket failed"));
+    };
   });
 }

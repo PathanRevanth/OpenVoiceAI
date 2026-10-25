@@ -46,6 +46,7 @@ from sqlalchemy import select
 
 from voicefirst.agents.deps import AgentDeps
 from voicefirst.agents.factory import DEFAULT_MAX_OUTPUT_TOKENS, THINKING_MAX_OUTPUT_TOKENS
+from voicefirst.api.attachments import extract_attachment_text, wrap_attachment_text
 from voicefirst.api.enrichment import (
     WEB_TOOLS,
     apply_instructions,
@@ -329,7 +330,10 @@ class ChatService:
         attach_meta: list[dict[str, str]] = []
         for _att in attachments or []:
             _meta: dict[str, str] = {"name": _att["name"], "media_type": _att["media_type"]}
-            if (
+            _preview = (_att.get("preview") or "").strip()
+            if _preview:
+                _meta["preview"] = _preview
+            elif (
                 _att["media_type"].startswith("image/")
                 and len(_att.get("data", "")) <= ATTACHMENT_PREVIEW_CHARS
             ):
@@ -410,18 +414,31 @@ class ChatService:
 
             from pydantic_ai import BinaryContent
 
-            parts: list = [model_input]
+            # Text-like and Office documents are flattened to text so every
+            # model can read them. Images, PDFs, audio, and video stay native.
+            extracted: list[str] = []
+            media_parts: list = []
             for att in attachments:
                 try:
-                    parts.append(
-                        BinaryContent(
-                            data=base64.b64decode(att["data"]),
-                            media_type=att["media_type"],
-                        )
-                    )
-                except Exception:  # noqa: BLE001 - skip malformed attachments
+                    raw = base64.b64decode(att["data"])
+                except Exception:  # noqa: BLE001 - schema already validated base64
                     continue
-            user_content = parts
+                text = extract_attachment_text(att["name"], att["media_type"], raw)
+                if text is not None:
+                    if text.strip():
+                        extracted.append(wrap_attachment_text(att["name"], att["media_type"], text))
+                    continue
+                try:
+                    media_parts.append(BinaryContent(data=raw, media_type=att["media_type"]))
+                except Exception:  # noqa: BLE001 - unsupported native media type
+                    continue
+            if extracted:
+                model_input = (
+                    f"{model_input}\n\n"
+                    "The user attached the following files. Treat their contents as "
+                    "part of the request:\n\n" + "\n\n".join(extracted)
+                )
+            user_content = [model_input, *media_parts] if media_parts else model_input
         else:
             user_content = model_input
 
