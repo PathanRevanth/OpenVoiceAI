@@ -208,6 +208,26 @@ Checked against the live deployment, not just locally:
   tokens, $0.106127, closed `</html>` and fence, and the persisted assistant
   message matched the streamed text exactly.
 
+## Artifact rendering fix (2026-10-25)
+
+- The model sometimes wraps an `artifact` fence in a longer outer fence
+  (four backticks around three). `parseSegments` now recursively unwraps any
+  non-explicit outer fence whose first body line is an artifact fence, so the
+  canvas receives the real HTML instead of a 233-line code block.
+- Public `/shared/[token]` pages now parse assistant messages into prose and
+  artifacts and render the same sandboxed preview as the chat canvas, with a
+  Source toggle. Markdown, CSV, JSON, PDF, and image artifacts keep their
+  dedicated views.
+- Voice background runs can interleave `text.delta` with live transcript
+  captions. Deltas now append to the streaming answer wherever it is, and
+  `text.done` finalizes that turn even when a caption is newer. The canvas
+  auto-opens for background artifacts even after the voice orb returns idle.
+- Verified locally against the stored GitHub artifact (`msg_77c8d956ce8d4a8f`,
+  8,287 chars) and Northwind artifact (`msg_b4cea536c1fd493e`, 48,167 chars).
+- Verified in production after Vercel deploy `022e105`: the live shared link
+  renders the Northwind page in a sandboxed iframe (`Light, shaped with
+  intention.`), and the chat canvas opens the same artifact as a live preview.
+
 ## Troubleshooting
 
 - **Sign-up 500 on Vercel** — `DATABASE_URL` missing or the Neon integration
