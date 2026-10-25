@@ -1,0 +1,40 @@
+# Render blueprint for the Voice-First FastAPI backend.
+#
+# Deploy: https://render.com/deploy?repo=https://github.com/PathanRevanth/OpenVoiceAI
+#
+# Vercel cannot host this service: it needs long-lived WebSockets, background
+# research runs, and a writable SQLite volume. Render's free web service
+# supports all three and redeploys automatically on every push to `master`.
+services:
+  - type: web
+    name: openvoiceai-backend
+    runtime: docker
+    plan: free
+    region: frankfurt
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    healthCheckPath: /health
+    autoDeployTrigger: commit
+    envVars:
+      - key: VOICEFIRST_AUTH_MODE
+        value: betterauth
+      - key: VOICEFIRST_AUTH_JWKS_URL
+        value: https://openvoiceai.vercel.app/api/auth/jwks
+      - key: VOICEFIRST_AUTH_BASE_URL
+        value: https://openvoiceai.vercel.app/api/auth
+      - key: VOICEFIRST_CORS_ORIGINS
+        value: '["https://openvoiceai.vercel.app"]'
+      - key: VOICEFIRST_DEFAULT_MODEL
+        value: anthropic:claude-haiku-5-5
+      - key: VOICEFIRST_REALTIME_MODEL
+        value: google:gemini-3.1-flash-live-preview
+      - key: VOICEFIRST_REQUIRE_PLAN_APPROVAL
+        value: "false"
+      - key: VOICEFIRST_LOG_LEVEL
+        value: INFO
+      - key: VOICEFIRST_SECRET_KEY
+        generateValue: true
+      - key: VOICEFIRST_GOOGLE_API_KEY
+        sync: false
+      - key: VOICEFIRST_ANTHROPIC_API_KEY
+        sync: false
