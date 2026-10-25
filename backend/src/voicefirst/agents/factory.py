@@ -160,10 +160,12 @@ _SPECIALIST_FALLBACK_INSTRUCTIONS = {
 
 # Room for complete deliverables (HTML pages, reports, generated code).
 # Providers otherwise fall back to ~4k output tokens, which silently cuts a
-# streamed artifact off mid-tag.
-DEFAULT_MAX_OUTPUT_TOKENS = 16_384
+# streamed artifact off mid-tag. 16k was still too low for a 35k-character
+# HTML/SVG page (token-dense markup hit the cap before </html>), so the normal
+# path gets 32k and thinking runs get the model's full 64k window.
+DEFAULT_MAX_OUTPUT_TOKENS = 32_768
 # Anthropic requires max_tokens above the thinking budget (16k at "high").
-THINKING_MAX_OUTPUT_TOKENS = 32_768
+THINKING_MAX_OUTPUT_TOKENS = 65_536
 
 # Sub-agent deliverables must survive verbatim: they are the artifact body the
 # orchestrator re-emits, so truncating them (even head+tail) breaks the result.
