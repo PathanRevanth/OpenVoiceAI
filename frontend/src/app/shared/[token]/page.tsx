@@ -61,7 +61,7 @@ export default function SharedPage() {
                 {m.text}
               </p>
             </div>
-          ) : (
+          ) : m.role === "assistant" ? (
             <div key={i} className="text-[13.5px] leading-relaxed text-[var(--text-1)]">
               <div className="space-y-3">
                 {m.segments.map((seg, j) =>
@@ -112,6 +112,12 @@ export default function SharedPage() {
                   </div>
                 </div>
               )}
+            </div>
+          ) : (
+            <div key={i} className="flex justify-center py-1">
+              <span className="flex items-center gap-1.5 rounded-full bg-[var(--panel-hover)] px-3 py-1 text-[12px] text-[var(--text-3)]">
+                {m.text}
+              </span>
             </div>
           ),
         )}
