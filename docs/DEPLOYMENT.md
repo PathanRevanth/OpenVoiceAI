@@ -14,10 +14,10 @@ the **Render GitHub App** is installed for `PathanRevanth/OpenVoiceAI`; Render
 receives push events through that app, not a classic repository webhook.
 
 The Render service uses `rootDir: backend`, so it rebuilds only when a push
-changes files under `backend/` (or `render.yaml`). Frontend- and docs-only
-commits are intentionally skipped: restarting the free backend for unrelated
-changes would force a cold start. Backend data now lives in Postgres, so
-skipping those deploys no longer risks losing anything.
+changes files under `backend/`. Frontend-, docs-, and blueprint-only commits are
+intentionally skipped: restarting the free backend for unrelated changes would
+force a cold start. Backend data now lives in Postgres, so skipping those
+deploys no longer risks losing anything.
 
 ## Frontend (Vercel)
 
@@ -89,6 +89,8 @@ the Render GitHub App to be authorized for the repository:
 If pushes still do not appear, confirm the app is installed at
 https://github.com/settings/installations and that the repository is included.
 A classic repo webhook is not used by Render and will not fix auto-deploy.
+Blueprint-only changes such as `render.yaml` do not trigger a deploy either;
+apply the blueprint or trigger a deploy manually.
 
 ### Output limits
 
