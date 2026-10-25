@@ -8,6 +8,9 @@ COPY src ./src
 RUN pip install --no-cache-dir uv && uv sync --frozen --no-dev --no-install-project
 
 ENV PATH="/app/.venv/bin:$PATH"
+# `uv sync --no-install-project` skips the editable install, so make the
+# package importable directly from the copied source tree.
+ENV PYTHONPATH="/app/src"
 
 # Non-root runtime user; the venv stays root-owned (read-only for the app) and
 # all writable state (SQLite db, memory store) lives in /data.
