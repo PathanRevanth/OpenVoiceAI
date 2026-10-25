@@ -147,6 +147,17 @@ function mediaTypeFor(file: File): string {
   return EXTENSION_TYPES[ext] ?? "";
 }
 
+/** Audio and video are native inputs only on Gemini chat models; pick a
+ * general-purpose one so an attachment never reaches a provider that rejects
+ * the binary block. */
+function mediaModel(options: ModelOption[]): ModelOption | undefined {
+  const specialized = /transcribe|robotics|computer-use|nano-banana|embedding/i;
+  return (
+    options.find((o) => o.id === "google:gemini-flash-latest") ??
+    options.find((o) => o.id.startsWith("google:gemini-") && !specialized.test(o.id))
+  );
+}
+
 function isImage(mediaType: string): boolean {
   return mediaType.startsWith("image/");
 }
@@ -779,13 +790,36 @@ export function ChatComposer({
       if (typeof r === "string") errors.push(r);
       else next.push(r);
     }
+    // Audio and video only travel natively to Gemini. Switch the model before
+    // sending so the run cannot fail with a provider "unsupported content"
+    // error after the user has already attached the file.
+    const hasMedia = next.some(
+      (a) => a.media_type.startsWith("audio/") || a.media_type.startsWith("video/"),
+    );
+    if (hasMedia && !effectiveModel.startsWith("google:")) {
+      const google = mediaModel(modelOptions);
+      if (google) {
+        selectModel(google.id);
+        errors.push(`Switched to ${google.name} to read audio and video.`);
+      } else {
+        // No capable model: drop the media rather than leaving an attachment
+        // that is guaranteed to fail at the provider.
+        for (let i = next.length - 1; i >= 0; i--) {
+          const media = next[i].media_type;
+          if (media.startsWith("audio/") || media.startsWith("video/")) next.splice(i, 1);
+        }
+        errors.push(
+          "Audio and video need a Gemini model. Add a Google key on Connections, then pick a Gemini model.",
+        );
+      }
+    }
     setAttachments((prev) => {
       const room = MAX_ATTACHMENTS - prev.length;
       if (next.length > room) errors.push(`max ${MAX_ATTACHMENTS} attachments`);
       return [...prev, ...next.slice(0, room)];
     });
     setNotice(errors.length ? errors[0] : null);
-  }, []);
+  }, [effectiveModel, modelOptions, selectModel]);
 
   const onKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter" && !e.shiftKey) {
@@ -818,7 +852,13 @@ export function ChatComposer({
     <div className="mx-auto w-full max-w-3xl px-6 pb-6 pt-2">
       {/* stop / regenerate chips live above; render nothing here when idle-error-free */}
       {notice && (
-        <p className="mb-2 text-center text-[11px] font-medium text-[var(--danger)]">{notice}</p>
+        <p
+          className={`mb-2 text-center text-[11px] font-medium ${
+            notice.startsWith("Switched to") ? "text-[var(--accent)]" : "text-[var(--danger)]"
+          }`}
+        >
+          {notice}
+        </p>
       )}
 
       <AnimatePresence initial={false}>
