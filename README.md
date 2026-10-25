@@ -284,6 +284,11 @@ cp .env.example .env   # fill in what you need
 docker compose up --build
 ```
 
+## Deploy
+
+The production setup (Vercel frontend + Render backend + Neon auth) and the
+auto-deploy flow are documented in [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
+
 ## Project layout
 
 ```
