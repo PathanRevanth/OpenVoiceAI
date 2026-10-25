@@ -138,6 +138,12 @@ Checked against the live deployment, not just locally:
 - The long-artifact prompt that previously truncated at 35,072 characters
   completed in production with the 32k cap: 59,709 characters, 24,872 output
   tokens, closed `</html>` and fence, persisted identically.
+- The live app rendered that artifact in the preview panel: 1,755 lines and a
+  59,845-character `srcdoc` iframe, with the Northwind hero visible and no
+  truncation.
+- Re-ran the production voice probe after the deploy: realtime Gemini session
+  connected in 673 ms, user and assistant transcripts streamed, 38 speech
+  frames arrived, and no errors were reported.
 
 ## Troubleshooting
 
