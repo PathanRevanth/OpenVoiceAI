@@ -19,17 +19,16 @@
  */
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Streamdown } from "streamdown";
-import "streamdown/styles.css";
 import { Icon } from "@/components/icons";
+import { ArtifactPreview } from "@/components/artifact-preview";
 import {
+  ARTIFACT_KIND_LABEL,
   artifactBytes,
   artifactFilename,
+  artifactFrameSource,
   artifactMime,
   buildPrintDocument,
-  buildReactDocument,
   escapeHtml,
-  imageSrc,
   parseCsv,
   prettyJson,
   withPrintTrigger,
@@ -43,23 +42,9 @@ interface ArtifactPanelProps {
   onClose: () => void;
 }
 
-const KIND_LABEL: Record<Artifact["kind"], string> = {
-  code: "Code",
-  markdown: "Document",
-  html: "Web page",
-  svg: "Graphic",
-  mermaid: "Diagram",
-  react: "React component",
-  pdf: "PDF",
-  csv: "Table",
-  json: "JSON",
-  image: "Image",
-};
-
 const PREVIEWABLE = new Set<Artifact["kind"]>(["html", "svg", "markdown", "react", "pdf", "csv", "image"]);
 const PRINTABLE = new Set<Artifact["kind"]>(["html", "svg", "markdown", "react", "csv", "json", "code", "mermaid"]);
 const BINARY = new Set<Artifact["kind"]>(["pdf", "image"]);
-const CSV_ROW_LIMIT = 500;
 
 export function ArtifactPanel({ artifacts, activeId, onSelect, onClose }: ArtifactPanelProps) {
   const active = useMemo(
@@ -84,8 +69,6 @@ export function ArtifactPanel({ artifacts, activeId, onSelect, onClose }: Artifa
     return { ...active, content };
   }, [active, versions, versionIdx]);
   const versionCount = (active && versions[active.id]?.length) || 1;
-
-  const frameDoc = useMemo(() => (shown ? withPreviewScrollReset(frameSource(shown)) : ""), [shown]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -167,7 +150,7 @@ export function ArtifactPanel({ artifacts, activeId, onSelect, onClose }: Artifa
         <div className="min-w-0 flex-1">
           <p className="truncate text-[13px] font-semibold tracking-tight text-[var(--text-1)]">{active.title}</p>
           <p className="font-mono text-[10.5px] text-[var(--text-3)]">
-            {KIND_LABEL[active.kind]}
+            {ARTIFACT_KIND_LABEL[active.kind]}
             {active.language && (active.kind === "code" || active.kind === "react") ? ` · ${active.language}` : ""}
             {!active.complete ? " · generating…" : ""}
             {versionCount > 1 ? ` · v${(versionIdx[active.id] ?? 0) + 1} of ${versionCount}` : ""}
@@ -253,7 +236,7 @@ export function ArtifactPanel({ artifacts, activeId, onSelect, onClose }: Artifa
             </span>
           </div>
         ) : showPreview ? (
-          <Preview artifact={shown} frameDoc={frameDoc} markdownRef={markdownRef} />
+          <ArtifactPreview artifact={shown} markdownRef={markdownRef} />
         ) : (
           <SourceBody artifact={shown} />
         )}
@@ -265,47 +248,6 @@ export function ArtifactPanel({ artifacts, activeId, onSelect, onClose }: Artifa
 // ---------------------------------------------------------------------------
 // Views
 // ---------------------------------------------------------------------------
-
-function Preview({
-  artifact,
-  frameDoc,
-  markdownRef,
-}: {
-  artifact: Artifact;
-  frameDoc: string;
-  markdownRef: React.RefObject<HTMLDivElement | null>;
-}) {
-  switch (artifact.kind) {
-    case "markdown":
-      return (
-        <div
-          ref={markdownRef}
-          className="px-6 py-5 text-[13.5px] leading-relaxed text-[var(--text-1)] [&_code]:rounded [&_code]:bg-[var(--panel-hover)] [&_code]:px-1 [&_pre]:overflow-x-auto [&_pre]:rounded-xl [&_pre]:border [&_pre]:border-[var(--hairline)] [&_pre]:bg-[var(--bg)] [&_pre]:p-3 [&_strong]:font-semibold"
-        >
-          <Streamdown>{artifact.content}</Streamdown>
-        </div>
-      );
-    case "csv":
-      return <CsvTable text={artifact.content} />;
-    case "pdf":
-      return <PdfPreview artifact={artifact} />;
-    case "image":
-      return (
-        // eslint-disable-next-line @next/next/no-img-element -- data/blob URL, not optimizable
-        <img src={imageSrc(artifact)} alt={artifact.title} className="mx-auto max-w-full p-6" />
-      );
-    default:
-      return (
-        <iframe
-          key={artifact.id}
-          title={artifact.title}
-          sandbox="allow-scripts"
-          srcDoc={frameDoc}
-          className="block h-full w-full bg-white"
-        />
-      );
-  }
-}
 
 function SourceBody({ artifact }: { artifact: Artifact }) {
   if (artifact.kind === "json") return <JsonSource text={artifact.content} streaming={!artifact.complete} />;
@@ -333,110 +275,9 @@ function JsonSource({ text, streaming }: { text: string; streaming: boolean }) {
   );
 }
 
-function CsvTable({ text }: { text: string }) {
-  const rows = useMemo(() => parseCsv(text), [text]);
-  const [query, setQuery] = useState("");
-  const header = rows[0] ?? [];
-  const filtered = useMemo(() => {
-    const body = rows.slice(1);
-    const q = query.trim().toLowerCase();
-    return q ? body.filter((r) => r.some((c) => c.toLowerCase().includes(q))) : body;
-  }, [rows, query]);
-  const shown = filtered.slice(0, CSV_ROW_LIMIT);
-
-  return (
-    <div className="flex h-full flex-col">
-      <div className="flex items-center gap-2 border-b border-[var(--hairline)] px-4 py-2">
-        <Icon name="search" size={12} className="text-[var(--text-3)]" />
-        <input
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder="Filter rows"
-          className="min-w-0 flex-1 bg-transparent text-[12px] outline-none placeholder:text-[var(--text-3)]"
-        />
-        <span className="tabular shrink-0 text-[10.5px] text-[var(--text-3)]">
-          {filtered.length} of {Math.max(0, rows.length - 1)} rows · {header.length} columns
-        </span>
-      </div>
-      <div className="min-h-0 flex-1 overflow-auto">
-        <table className="w-full border-collapse text-[12px]">
-          <thead className="sticky top-0 bg-[var(--bg-raised)]">
-            <tr>
-              {header.map((h, i) => (
-                <th key={i} className="border-b border-[var(--hairline)] px-3 py-2 text-left font-semibold text-[var(--text-1)]">
-                  {h}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {shown.map((r, i) => (
-              <tr key={i} className="odd:bg-[var(--panel-hover)]/40">
-                {header.map((_, j) => (
-                  <td key={j} className="border-b border-[var(--hairline)] px-3 py-1.5 align-top text-[var(--text-2)]">
-                    {r[j] ?? ""}
-                  </td>
-                ))}
-              </tr>
-            ))}
-          </tbody>
-        </table>
-        {filtered.length > CSV_ROW_LIMIT && (
-          <p className="px-4 py-3 text-[11px] text-[var(--text-3)]">
-            Showing the first {CSV_ROW_LIMIT} rows. Download the file for the full data.
-          </p>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function PdfPreview({ artifact }: { artifact: Artifact }) {
-  const src = useMemo(() => {
-    try {
-      const base64 = artifact.content.replace(/^data:[^;]+;base64,/, "").replace(/\s+/g, "");
-      return `data:application/pdf;base64,${base64}`;
-    } catch {
-      return null;
-    }
-  }, [artifact.content]);
-  if (!src) return <p className="p-6 text-[12px] text-[var(--danger)]">This PDF payload is not valid base64.</p>;
-  return <iframe title={artifact.title} src={src} className="block h-full w-full bg-white" />;
-}
-
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
-/**
- * Generated pages sometimes restore or inherit a scroll offset when their
- * frame is remounted. Previews should always open at the top, so the frame
- * document resets itself after parsing and again after load.
- */
-const PREVIEW_SCROLL_RESET =
-  '<script>(function(){function top(){try{window.scrollTo(0,0);}catch(e){}}' +
-  'top();document.addEventListener("DOMContentLoaded",top);' +
-  'addEventListener("load",function(){top();requestAnimationFrame(top);});})();</script>';
-
-function withPreviewScrollReset(doc: string): string {
-  if (!doc) return doc;
-  return /<\/body\s*>/i.test(doc)
-    ? doc.replace(/<\/body\s*>/i, `${PREVIEW_SCROLL_RESET}</body>`)
-    : `${doc}${PREVIEW_SCROLL_RESET}`;
-}
-
-function frameSource(artifact: Artifact): string {
-  switch (artifact.kind) {
-    case "html":
-      return artifact.content;
-    case "svg":
-      return `<!doctype html><html><body style="margin:0;display:grid;place-items:center;min-height:100vh;background:#fff">${artifact.content}</body></html>`;
-    case "react":
-      return buildReactDocument(artifact.content);
-    default:
-      return "";
-  }
-}
 
 function tableHtml(rows: string[][]): string {
   const [header = [], ...body] = rows;
@@ -460,7 +301,7 @@ function printArtifact(artifact: Artifact, markdownHtml: string) {
       break;
     case "svg":
     case "react":
-      doc = withPrintTrigger(frameSource(artifact));
+      doc = withPrintTrigger(artifactFrameSource(artifact));
       break;
     case "markdown":
       doc = buildPrintDocument(markdownHtml, artifact.title);

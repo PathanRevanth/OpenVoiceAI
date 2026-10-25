@@ -133,6 +133,29 @@ function defaultTitle(kind: ArtifactKind, lang: string): string {
  * of claiming it is "generating" forever.
  */
 export function parseSegments(text: string, keyPrefix = "a", final = false): Segment[] {
+  return parseSegmentsInner(text, keyPrefix, final, 0);
+}
+
+function firstNonEmptyLine(text: string): string {
+  for (const line of text.split("\n")) {
+    if (line.trim()) return line;
+  }
+  return "";
+}
+
+function isArtifactFenceLine(line: string): boolean {
+  const open = FENCE_OPEN.exec(line);
+  if (!open) return false;
+  const info = open[3].trim();
+  return info.split(/\s+/)[0]?.toLowerCase() === "artifact";
+}
+
+function parseSegmentsInner(
+  text: string,
+  keyPrefix: string,
+  final: boolean,
+  depth: number,
+): Segment[] {
   const lines = text.split("\n");
   const segments: Segment[] = [];
   let prose: string[] = [];
@@ -175,6 +198,18 @@ export function parseSegments(text: string, keyPrefix = "a", final = false): Seg
     const bodyEnd = end === -1 ? lines.length : end;
     const body = lines.slice(i + 1, bodyEnd).join("\n");
     const bodyLines = bodyEnd - (i + 1);
+
+    // Models often wrap an artifact fence in an outer bare/markdown fence
+    // (typically ```` around ```artifact ... ```). Treat the inner fence as the
+    // real artifact instead of surfacing the wrapper as one giant code block.
+    if (!explicit && depth < 3 && isArtifactFenceLine(firstNonEmptyLine(body))) {
+      flushProse();
+      const innerFinal = final || end !== -1;
+      segments.push(...parseSegmentsInner(body, `${keyPrefix}-w${i}`, innerFinal, depth + 1));
+      i = end === -1 ? lines.length : end + 1;
+      continue;
+    }
+
     const kind = explicit
       ? (KIND_BY_NAME[(attrs.type ?? lang).toLowerCase()] ?? "code")
       : autoKind(lang, bodyLines);
@@ -372,6 +407,51 @@ export function buildReactDocument(source: string): string {
   }
 })();
 </script></body></html>`;
+}
+
+/** Human-readable kind label shared by the artifact canvas and shared links. */
+export const ARTIFACT_KIND_LABEL: Record<ArtifactKind, string> = {
+  code: "Code",
+  markdown: "Document",
+  html: "Web page",
+  svg: "Graphic",
+  mermaid: "Diagram",
+  react: "React component",
+  pdf: "PDF",
+  csv: "Table",
+  json: "JSON",
+  image: "Image",
+};
+
+/** Complete document for kinds that render inside the sandboxed preview frame. */
+export function artifactFrameSource(artifact: Artifact): string {
+  switch (artifact.kind) {
+    case "html":
+      return artifact.content;
+    case "svg":
+      return `<!doctype html><html><body style="margin:0;display:grid;place-items:center;min-height:100vh;background:#fff">${artifact.content}</body></html>`;
+    case "react":
+      return buildReactDocument(artifact.content);
+    default:
+      return "";
+  }
+}
+
+/**
+ * Generated pages sometimes restore or inherit a scroll offset when their
+ * frame is remounted. Previews should always open at the top, so the frame
+ * document resets itself after parsing and again after load.
+ */
+const PREVIEW_SCROLL_RESET =
+  '<script>(function(){function top(){try{window.scrollTo(0,0);}catch(e){}}' +
+  'top();document.addEventListener("DOMContentLoaded",top);' +
+  'addEventListener("load",function(){top();requestAnimationFrame(top);});})();</script>';
+
+export function withPreviewScrollReset(doc: string): string {
+  if (!doc) return doc;
+  return /<\/body\s*>/i.test(doc)
+    ? doc.replace(/<\/body\s*>/i, `${PREVIEW_SCROLL_RESET}</body>`)
+    : `${doc}${PREVIEW_SCROLL_RESET}`;
 }
 
 const PRINT_TRIGGER =

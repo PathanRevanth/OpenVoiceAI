@@ -104,6 +104,8 @@ function AssistantInner() {
   // when a new artifact streams in during a run or voice session.
   const [artifactsOpen, setArtifactsOpen] = useState(false);
   const [selectedArtifactId, setSelectedArtifactId] = useState<string | null>(null);
+  /** Background voice/research runs still streaming an answer. */
+  const [backgroundRuns, setBackgroundRuns] = useState(0);
 
   const artifacts = useMemo<Artifact[]>(
     () =>
@@ -121,11 +123,11 @@ function AssistantInner() {
   useEffect(() => {
     const grew = artifacts.length > artifactCount.current;
     artifactCount.current = artifacts.length;
-    if (grew && (busy || voice.mode !== "idle")) {
+    if (grew && (busy || voice.mode !== "idle" || backgroundRuns > 0)) {
       setSelectedArtifactId(artifacts[artifacts.length - 1].id);
       setArtifactsOpen(true);
     }
-  }, [artifacts, busy, voice.mode]);
+  }, [artifacts, busy, voice.mode, backgroundRuns]);
 
   const openArtifact = useCallback((id: string) => {
     setSelectedArtifactId(id);
@@ -168,9 +170,17 @@ function AssistantInner() {
 
   const addTurn = useCallback((turn: Turn) => {
     setTurns((prev) => {
-      const last = prev[prev.length - 1];
-      if (turn.role === "assistant" && last?.role === "assistant" && last.streaming) {
-        return [...prev.slice(0, -1), { ...last, text: last.text + turn.text }];
+      // Background artifact deltas can arrive while a live voice caption is
+      // the newest row. Append to the streaming answer wherever it is, rather
+      // than fragmenting the artifact across multiple assistant turns.
+      if (turn.role === "assistant" && turn.streaming) {
+        for (let i = prev.length - 1; i >= 0; i--) {
+          if (prev[i].role === "assistant" && prev[i].streaming) {
+            const next = [...prev];
+            next[i] = { ...next[i], text: next[i].text + turn.text };
+            return next;
+          }
+        }
       }
       return [...prev, turn];
     });
@@ -263,9 +273,15 @@ function AssistantInner() {
 
   const finalizeTurn = useCallback((text?: string) => {
     setTurns((prev) => {
-      const last = prev[prev.length - 1];
-      if (last?.role === "assistant" && last.streaming) {
-        return [...prev.slice(0, -1), { ...last, text: text ?? last.text, streaming: false }];
+      // Same as addTurn: a live voice caption may be the newest row, so close
+      // the streaming assistant turn wherever it sits. Otherwise its artifact
+      // stays "generating" forever and the canvas never switches to preview.
+      for (let i = prev.length - 1; i >= 0; i--) {
+        if (prev[i].role === "assistant" && prev[i].streaming) {
+          const next = [...prev];
+          next[i] = { ...next[i], text: text ?? next[i].text, streaming: false };
+          return next;
+        }
       }
       return prev;
     });
@@ -356,6 +372,7 @@ function AssistantInner() {
             if (ev.data.agent && ev.data.agent !== "orchestrator") {
               addTurn({ role: "system", text: `specialist: ${ev.data.agent}` });
             }
+            if (background) setBackgroundRuns((n) => n + 1);
             if (!background) {
               setBusy(true);
               setVoice((v) => (v.mode === "idle" ? v : { ...v, mode: "thinking", info: v.info }));
@@ -398,7 +415,9 @@ function AssistantInner() {
             if (runId || modelLabel) {
               setTurns((prev) => {
                 for (let i = prev.length - 1; i >= 0; i--) {
-                  if (prev[i].role === "assistant") {
+                  // Skip a live voice caption so run metadata lands on the
+                  // finalized artifact answer, not the spoken transcript.
+                  if (prev[i].role === "assistant" && !prev[i].live) {
                     const next = [...prev];
                     next[i] = {
                       ...next[i],
@@ -524,6 +543,7 @@ function AssistantInner() {
               ev.data.status === "awaiting_approval" && ev.data.run_id
                 ? String(ev.data.run_id)
                 : null;
+            if (background) setBackgroundRuns((n) => Math.max(0, n - 1));
             if (!background) {
               setBusy(false);
               setVoice((v) => (v.mode === "idle" ? v : { ...v, mode: "listening", info: v.info }));
@@ -553,6 +573,7 @@ function AssistantInner() {
           case "run.failed":
             addTurn({ role: "system", text: `failed: ${ev.data.error}` });
             if (background) {
+              setBackgroundRuns((n) => Math.max(0, n - 1));
               setVoice((v) => (v.mode === "thinking" ? { ...v, mode: "listening" } : v));
             }
             break;
