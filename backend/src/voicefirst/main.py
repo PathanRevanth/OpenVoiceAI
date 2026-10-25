@@ -73,6 +73,8 @@ def _log_config_warnings(settings) -> None:  # noqa: ANN001 - Settings import cy
             "Set VOICEFIRST_AUTH_MODE=betterauth in production.",
             settings.auth_mode,
         )
+    if settings.database_url.startswith("postgresql"):
+        logger.info("Using PostgreSQL via VOICEFIRST_DATABASE_URL")
     if settings.database_url.startswith("sqlite"):
         logger.info("Using SQLite at %s â€” switch to PostgreSQL for production.", settings.database_url)
 
