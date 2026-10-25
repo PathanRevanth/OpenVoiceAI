@@ -204,6 +204,9 @@ Checked against the live deployment, not just locally:
 - Re-ran the production voice probe with the demo admin after the switch:
   realtime Gemini connected in 700 ms, user and assistant transcripts streamed,
   15 speech frames arrived, and no errors were reported.
+- Re-ran the long-artifact prompt on Postgres: 44,850 characters, 19,431 output
+  tokens, $0.106127, closed `</html>` and fence, and the persisted assistant
+  message matched the streamed text exactly.
 
 ## Troubleshooting
 
