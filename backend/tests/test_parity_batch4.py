@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 from pydantic_ai.messages import (
+    NativeToolCallPart,
     PartDeltaEvent,
     PartStartEvent,
     ThinkingPart,
     ThinkingPartDelta,
+    ToolCallPart,
 )
 
 from voicefirst.api.chat_service import _final_thinking, _translate_event
@@ -32,6 +34,19 @@ def test_thinking_delta_event_appends():
 def test_empty_thinking_is_dropped():
     assert _translate_event(PartStartEvent(index=0, part=ThinkingPart(content="")), [], []) == []
     assert _translate_event(PartDeltaEvent(index=0, delta=ThinkingPartDelta()), [], []) == []
+
+
+def test_function_tool_start_deferred_to_call_tools_node():
+    # The model-response part has no assembled args yet; the call-tools node
+    # emits the single `tool.started` with complete args.
+    part = ToolCallPart(tool_name="web_search", args={})
+    assert _translate_event(PartStartEvent(index=0, part=part), [], []) == []
+
+
+def test_native_tool_start_is_still_streamed():
+    part = NativeToolCallPart(tool_name="web_search", args={"query": "x"})
+    out = _translate_event(PartStartEvent(index=0, part=part), [], [])
+    assert out == [{"type": "tool.started", "data": {"tool": "web_search", "args": {"query": "x"}}}]
 
 
 def test_final_thinking_caps_with_marker():

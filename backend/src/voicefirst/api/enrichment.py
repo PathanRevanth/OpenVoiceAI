@@ -62,9 +62,49 @@ def _title_for(url: str, label: str | None = None) -> str:
     return _domain(url)
 
 
+_NATIVE_WEB_TOOLS = frozenset({"web_search", "web_fetch"})
+
+
+def native_web_evidence(messages: list | None) -> tuple[bool, list[dict[str, str]]]:
+    """Detect server-side web search/fetch and return the result pages.
+
+    Providers with native web tools (e.g. Anthropic's `web_search`) run the
+    search inside the model request, so no function tool call ever reaches the
+    run loop. The evidence lives in `NativeToolCallPart`/`NativeToolReturnPart`
+    parts instead; this helper turns those into the same source shape the UI
+    already renders.
+    """
+    used = False
+    results: list[dict[str, str]] = []
+    for message in messages or []:
+        for part in getattr(message, "parts", ()) or ():
+            name = getattr(part, "tool_name", "")
+            if name not in _NATIVE_WEB_TOOLS:
+                continue
+            kind = getattr(part, "part_kind", "")
+            if kind not in ("builtin-tool-call", "builtin-tool-return"):
+                continue
+            used = True
+            if kind != "builtin-tool-return":
+                continue
+            content = getattr(part, "content", None)
+            if not isinstance(content, list):
+                continue
+            for item in content:
+                if not isinstance(item, dict):
+                    continue
+                url = item.get("url")
+                if not isinstance(url, str) or not url.startswith("http"):
+                    continue
+                title = item.get("title")
+                results.append({"url": url, "title": title if isinstance(title, str) else None})
+    return used, results
+
+
 def extract_sources(
     final_text: str,
     tool_calls: list[dict] | None = None,
+    native_results: list[dict[str, str]] | None = None,
 ) -> list[dict[str, str]]:
     """Merge answer links with fetched URLs into a numbered source list."""
     seen: dict[str, dict[str, str]] = {}
@@ -107,6 +147,12 @@ def extract_sources(
         # A search query that produced no fetchable URL still proves the run
         # consulted the web; the answer text links remain the source list.
         _ = tool
+
+    # Native (server-side) web tools return their result pages as structured
+    # content; append them after the answer's own citations.
+    for item in native_results or []:
+        if isinstance(item, dict):
+            add(item.get("url"), item.get("title"))
 
     return [{"id": str(i + 1), **entry} for i, entry in enumerate(seen.values())]
 

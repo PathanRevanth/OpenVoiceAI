@@ -33,21 +33,28 @@ from pydantic_ai.messages import (
     ModelMessage,
     ModelMessagesTypeAdapter,
     ModelResponse,
+    NativeToolCallPart,
+    NativeToolReturnPart,
     PartDeltaEvent,
     PartStartEvent,
     TextPart,
     TextPartDelta,
     ThinkingPart,
     ThinkingPartDelta,
-    ToolCallPart,
 )
 from sqlalchemy import select
 
 from voicefirst.agents.deps import AgentDeps
-from voicefirst.api.enrichment import WEB_TOOLS, apply_instructions, build_followups, extract_sources
+from voicefirst.agents.factory import DEFAULT_MAX_OUTPUT_TOKENS, THINKING_MAX_OUTPUT_TOKENS
+from voicefirst.api.enrichment import (
+    WEB_TOOLS,
+    apply_instructions,
+    build_followups,
+    extract_sources,
+    native_web_evidence,
+)
 from voicefirst.control_plane.model_catalog import CATALOG
 
-THINKING_MAX_OUTPUT_TOKENS = 32_768
 # Image previews persisted on the user message (chars of base64); bigger
 # uploads stay metadata-only so message rows stay small.
 ATTACHMENT_PREVIEW_CHARS = 400_000
@@ -297,11 +304,15 @@ class ChatService:
             )
         if model is None:
             model = await self._rt.connections.resolve_chat_model(deps.user_id)
+        # Cap output high enough for complete artifacts. Providers otherwise
+        # default to a low cap (Anthropic: 4096) and long HTML/SVG deliverables
+        # are cut off mid-tag with their fence left open.
+        model_settings: dict[str, Any] = {"max_tokens": DEFAULT_MAX_OUTPUT_TOKENS}
         # Reasoning effort applies only to a selection the provider lists with that level.
-        model_settings: dict[str, Any] | None = None
         if effort and selected_model_id and effort in CATALOG.efforts_for(selected_model_id):
             # Anthropic requires max_tokens above the thinking budget (16k at "high").
-            model_settings = {"thinking": effort, "max_tokens": THINKING_MAX_OUTPUT_TOKENS}
+            model_settings["thinking"] = effort
+            model_settings["max_tokens"] = THINKING_MAX_OUTPUT_TOKENS
         elif effort:
             await self._rt.events.publish(
                 "run.effort_ignored",
@@ -362,6 +373,7 @@ class ChatService:
         else:
             history_models = _to_model_messages(await self.history_messages(conversation.id))
         text_parts: list[str] = []
+        final_text_parts: list[str] = []
         thinking_parts: list[str] = []
         deferred: DeferredToolRequests | None = None
         usage = None
@@ -427,7 +439,9 @@ class ChatService:
                 cancellation_token=cancellation_token,
             ) as agent_run:
                 tool_calls: list[dict[str, Any]] = []
-                async for out in _stream_nodes(agent, agent_run, text_parts, collector, thinking_parts):
+                async for out in _stream_nodes(
+                    agent, agent_run, text_parts, collector, thinking_parts, final_text_parts
+                ):
                     if out.get("type") == "tool.started":
                         data = out.get("data") or {}
                         tool_calls.append({"tool": data.get("tool"), "args": data.get("args") or {}})
@@ -435,6 +449,7 @@ class ChatService:
                     if first_token_ms is None and out.get("type") == "text.delta":
                         first_token_ms = int((time.time() - run_t0) * 1000)
                 usage = agent_run.usage
+                _apply_usage_cost(usage, model, self._rt.settings.default_model)
                 result = agent_run.result
                 if result is not None and not isinstance(result.output, DeferredToolRequests):
                     await self._save_conversation_history(conversation.id, agent_run.all_messages())
@@ -453,15 +468,16 @@ class ChatService:
                 tenant_id=deps.tenant_id, detail={"error": error},
             )
 
-        final_text = "".join(text_parts)
+        final_text = "".join(final_text_parts)
         if error is not None:
             await self.finish_run(run.id, status="failed", usage=usage, error=error, spans=collector.normalize(), ttft_ms=first_token_ms)
             await self._rt.events.publish("run.failed", {"run_id": run.id, "error": error}, tenant_id=deps.tenant_id)
             yield {"type": "run.failed", "data": {"run_id": run.id, "error": error}}
             return
 
-        used_web = any(str(c.get("tool", "")) in WEB_TOOLS for c in tool_calls)
-        sources = extract_sources(final_text, tool_calls)
+        native_web_used, native_results = native_web_evidence(agent_run.all_messages())
+        used_web = native_web_used or any(str(c.get("tool", "")) in WEB_TOOLS for c in tool_calls)
+        sources = extract_sources(final_text, tool_calls, native_results)
         followups = build_followups(message, final_text, used_web=used_web)
         thinking = _final_thinking(thinking_parts)
         await self.add_message(
@@ -700,6 +716,7 @@ class ChatService:
             },
         }
         text_parts: list[str] = []
+        final_text_parts: list[str] = []
         thinking_parts: list[str] = []
         usage = None
         error: str | None = None
@@ -716,7 +733,9 @@ class ChatService:
                 cancellation_token=cancellation_token,
             ) as agent_run:
                 tool_calls: list[dict[str, Any]] = []
-                async for out in _stream_nodes(agent, agent_run, text_parts, collector, thinking_parts):
+                async for out in _stream_nodes(
+                    agent, agent_run, text_parts, collector, thinking_parts, final_text_parts
+                ):
                     if out.get("type") == "tool.started":
                         data = out.get("data") or {}
                         tool_calls.append({"tool": data.get("tool"), "args": data.get("args") or {}})
@@ -724,6 +743,7 @@ class ChatService:
                     if first_token_ms is None and out.get("type") == "text.delta":
                         first_token_ms = int((time.time() - run_t0) * 1000)
                 usage = agent_run.usage
+                _apply_usage_cost(usage, model, self._rt.settings.default_model)
                 if original.conversation_id and agent_run.result is not None:
                     await self._save_conversation_history(original.conversation_id, agent_run.all_messages())
         except RunCancelled:
@@ -736,13 +756,14 @@ class ChatService:
             ACTIVE_RUNS.pop(run.id, None)
             ACTIVE_TOKENS.pop(run.id, None)
 
-        final_text = "".join(text_parts)
+        final_text = "".join(final_text_parts)
         if error is not None:
             await self.finish_run(run.id, status="failed", usage=usage, error=error, spans=collector.normalize(), ttft_ms=first_token_ms)
             yield {"type": "run.failed", "data": {"run_id": run.id, "error": error}}
             return
-        used_web = any(str(c.get("tool", "")) in WEB_TOOLS for c in tool_calls)
-        sources = extract_sources(final_text, tool_calls)
+        native_web_used, native_results = native_web_evidence(agent_run.all_messages())
+        used_web = native_web_used or any(str(c.get("tool", "")) in WEB_TOOLS for c in tool_calls)
+        sources = extract_sources(final_text, tool_calls, native_results)
         followups = build_followups(user_fallback or "", final_text, used_web=used_web)
         thinking = _final_thinking(thinking_parts)
         if original.conversation_id:
@@ -835,6 +856,7 @@ class ChatService:
         yield {"type": "run.started", "data": {"run_id": run_id, "resumed": True, "agent": run_agent_slug}}
 
         text_parts: list[str] = []
+        final_text_parts: list[str] = []
         thinking_parts: list[str] = []
         usage = None
         error: str | None = None
@@ -848,24 +870,28 @@ class ChatService:
                 cancellation_token=cancellation_token,
             ) as agent_run:
                 tool_calls: list[dict[str, Any]] = []
-                async for out in _stream_nodes(agent, agent_run, text_parts, None, thinking_parts):
+                async for out in _stream_nodes(
+                    agent, agent_run, text_parts, None, thinking_parts, final_text_parts
+                ):
                     if out.get("type") == "tool.started":
                         data = out.get("data") or {}
                         tool_calls.append({"tool": data.get("tool"), "args": data.get("args") or {}})
                     yield out
                 usage = agent_run.usage
+                _apply_usage_cost(usage, model, self._rt.settings.default_model)
                 if conversation_id:
                     await self._save_conversation_history(conversation_id, agent_run.all_messages())
         except Exception as exc:  # noqa: BLE001
             error = f"{type(exc).__name__}: {exc}"
 
-        final_text = "".join(text_parts)
+        final_text = "".join(final_text_parts)
         if error is not None:
             await self.finish_run(run_id, status="failed", usage=usage, error=error)
             yield {"type": "run.failed", "data": {"run_id": run_id, "error": error}}
             return
-        used_web = any(str(c.get("tool", "")) in WEB_TOOLS for c in tool_calls)
-        sources = extract_sources(final_text, tool_calls)
+        native_web_used, native_results = native_web_evidence(agent_run.all_messages())
+        used_web = native_web_used or any(str(c.get("tool", "")) in WEB_TOOLS for c in tool_calls)
+        sources = extract_sources(final_text, tool_calls, native_results)
         followups = build_followups("", final_text, used_web=used_web)
         thinking = _final_thinking(thinking_parts)
         if conversation_id:
@@ -932,6 +958,28 @@ def _to_model_messages(rows: list[dict[str, Any]]) -> list[ModelMessage]:
     return messages
 
 
+def _apply_usage_cost(usage: Any, model: Any, fallback_model: str | None = None) -> None:
+    """Fill `usage.cost` when the registry has no price for the model.
+
+    `SpendLimits` already enforces the USD ceiling through the same fallback;
+    this keeps the persisted run cost and the usage screen consistent with it.
+    When `model` is None the agent ran on its platform-default model string.
+    """
+    if usage is None or getattr(usage, "cost", None):
+        return
+    model_name = getattr(model, "model_name", None)
+    provider_name = getattr(model, "system", None)
+    if not model_name and fallback_model:
+        provider_name, _, model_name = fallback_model.partition(":")
+    if not model_name:
+        return
+    from voicefirst.pricing import price_usage
+
+    cost = price_usage(usage, model_name=model_name, provider_name=provider_name)
+    if cost is not None:
+        usage.cost = cost
+
+
 def _usage_dict(usage: Any) -> dict[str, Any]:
     if usage is None:
         return {}
@@ -946,7 +994,10 @@ def _usage_dict(usage: Any) -> dict[str, Any]:
 
 
 def _translate_event(
-    event: Any, text_parts: list[str], thinking_parts: list[str] | None = None
+    event: Any,
+    text_parts: list[str],
+    thinking_parts: list[str] | None = None,
+    final_text_parts: list[str] | None = None,
 ) -> list[dict[str, Any]]:
     """Convert pydantic-ai graph events into SSE-ready dicts."""
     out: list[dict[str, Any]] = []
@@ -955,18 +1006,27 @@ def _translate_event(
         if isinstance(part, TextPart):
             out.append({"type": "text.delta", "data": {"delta": part.content}})
             text_parts.append(part.content)
+            if final_text_parts is not None:
+                final_text_parts.append(part.content)
         elif isinstance(part, ThinkingPart):
             if part.content:
                 out.append({"type": "thinking.delta", "data": {"delta": part.content}})
                 if thinking_parts is not None:
                     thinking_parts.append(part.content)
-        elif isinstance(part, ToolCallPart):
+        # Function tool calls are surfaced from the call-tools node, where the
+        # arguments are fully assembled. Emitting here too duplicated every
+        # `tool.started` event and usually reported empty args.
+        elif isinstance(part, NativeToolCallPart):
+            # Server-side tools (Anthropic web search, etc.) never reach the
+            # tool-call node, so surface them here as normal activity.
             out.append(
                 {
                     "type": "tool.started",
                     "data": {"tool": part.tool_name, "args": _safe_args(part.args)},
                 }
             )
+        elif isinstance(part, NativeToolReturnPart):
+            out.append({"type": "tool.finished", "data": {"tool": part.tool_name}})
     elif isinstance(event, PartDeltaEvent):
         delta = event.delta
         if isinstance(delta, TextPartDelta):
@@ -974,6 +1034,8 @@ def _translate_event(
             if content:
                 out.append({"type": "text.delta", "data": {"delta": content}})
                 text_parts.append(content)
+                if final_text_parts is not None:
+                    final_text_parts.append(content)
         elif isinstance(delta, ThinkingPartDelta):
             content = delta.content_delta or ""
             if content:
@@ -989,15 +1051,37 @@ async def _stream_nodes(
     text_parts: list[str],
     collector: SpanCollector | None = None,
     thinking_parts: list[str] | None = None,
+    final_text_parts: list[str] | None = None,
 ) -> AsyncIterator[dict[str, Any]]:
     """Yield SSE events from a running agent run by streaming its nodes."""
     async for node in agent_run:
         if agent.is_model_request_node(node):
+            # Only the last model request is the user-facing answer. Earlier
+            # requests may contain "let me search..." commentary before a tool
+            # call; that text must not be concatenated into the deliverable.
+            if final_text_parts is not None:
+                final_text_parts.clear()
+            native_open: dict[str, int] = {}
             model_span = collector.start("model", "model") if collector else None
             async with node.stream(agent_run.ctx) as node_stream:
                 async for ev in node_stream:
-                    for out in _translate_event(ev, text_parts, thinking_parts):
+                    for out in _translate_event(ev, text_parts, thinking_parts, final_text_parts):
+                        if out.get("type") == "tool.started":
+                            name = out.get("data", {}).get("tool")
+                            if name:
+                                native_open[name] = native_open.get(name, 0) + 1
+                        elif out.get("type") == "tool.finished":
+                            name = out.get("data", {}).get("tool")
+                            if name and native_open.get(name):
+                                native_open[name] -= 1
                         yield out
+            # Anthropic returns built-in tool results inline instead of
+            # streaming a NativeToolReturnPart. The request is finished either
+            # way, so close anything still open instead of leaving the UI with
+            # a spinner that never stops.
+            for name, count in native_open.items():
+                for _ in range(count):
+                    yield {"type": "tool.finished", "data": {"tool": name}}
             if collector and model_span:
                 collector.end(model_span)
         if agent.is_call_tools_node(node):

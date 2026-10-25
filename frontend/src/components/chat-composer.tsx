@@ -15,7 +15,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import { AnimatePresence } from "motion/react";
 import { Icon } from "@/components/icons";
 import { ProviderLogo, AgentLogo, agentMark } from "@/components/provider-logo";
-import type { OrbMode } from "@/components/voice-orb";
+import { VoiceOrb, type OrbMode } from "@/components/voice-orb";
 import {
   ModelSelectorContent,
   ModelSelectorEffort,
@@ -115,6 +115,8 @@ export function ChatComposer({
   onEffortChange,
   voice,
   onVoiceChange,
+  voiceModel,
+  onVoiceModelChange,
   draftKey,
 }: {
   busy: boolean;
@@ -131,6 +133,9 @@ export function ChatComposer({
   /** Selected realtime voice id for the active provider; null = provider default. */
   voice: string | null;
   onVoiceChange: (voice: string | null) => void;
+  /** Realtime speech model (`google:gemini-…`); independent of the chat model. */
+  voiceModel: string | null;
+  onVoiceModelChange: (model: string | null) => void;
   /** Conversation the composer is writing to (null = new chat); scopes drafts. */
   draftKey: string | null;
 }) {
@@ -295,8 +300,11 @@ export function ChatComposer({
   // --- model + voice selection (voices follow the model's provider) ---
 
   const effectiveModel = model ?? catalog?.default_chat_model ?? "";
-  const modelProvider = effectiveModel.split(":", 1)[0] || "openai";
-  const providerMeta = catalog?.providers[modelProvider] ?? null;
+  const modelProvider = effectiveModel.split(":", 1)[0] || "google";
+  const realtimeProvider =
+    (catalog?.default_realtime_model ?? "google:gemini-3.1-flash-live-preview").split(":", 1)[0] ||
+    "google";
+  const providerMeta = catalog?.providers[realtimeProvider] ?? catalog?.providers[modelProvider] ?? null;
 
   // Live model list from each provider's own API (refreshed every minute and
   // whenever the picker opens); providers that cannot be reached say why.
@@ -380,15 +388,10 @@ export function ChatComposer({
       const next = modelOptions.find((o) => o.id === value);
       const levels = Array.isArray(next?.efforts) ? next.efforts.map((e) => e.id) : [];
       if (effort && !levels.includes(effort)) onEffortChange(null);
-      // Voices belong to the model's provider; reset when it changes.
-      const provider = value.split(":", 1)[0];
       setPlusOpen(false);
       setSearchOpen(false);
-      if (voice && !(catalog?.providers[provider]?.voices ?? []).some((v) => v.id === voice)) {
-        onVoiceChange(null);
-      }
     },
-    [catalog, effort, modelOptions, onEffortChange, onModelChange, onVoiceChange, rememberModel, voice],
+    [catalog, effort, modelOptions, onEffortChange, onModelChange, rememberModel],
   );
 
   const selected = agents.find((a) => a.slug === agentSlug) ?? null;
@@ -473,7 +476,7 @@ export function ChatComposer({
     ? (providerMeta?.reason ?? "Voice unavailable for this provider")
     : !voiceAvailable
       ? "No realtime key - browser speech will be used"
-      : `${providerMeta?.label ?? modelProvider} realtime voices`;
+      : `${providerMeta?.label ?? realtimeProvider} realtime voices`;
 
   const menuCtx: ToolsMenuCtx = {
     view: toolsView,
@@ -503,6 +506,16 @@ export function ChatComposer({
     onVoice: (id) => {
       onVoiceChange(id);
       setToolsView("menu");
+    },
+    voiceModels: Object.entries(catalog?.providers ?? {}).flatMap(([pid, p]) =>
+      (p.voice_models ?? []).map((m) => ({
+        id: `${pid}:${m.id}`,
+        label: `${p.label} · ${m.label}`,
+      })),
+    ),
+    voiceModel,
+    onVoiceModel: (id) => {
+      onVoiceModelChange(id === catalog?.default_realtime_model ? null : id);
     },
     instructionsOn: instructions !== "",
     instrDraft,
@@ -698,7 +711,17 @@ export function ChatComposer({
           }}
           onKeyDown={onKeyDown}
           onPaste={onPaste}
-          placeholder={busy ? "Working…" : voiceActive ? "Listening…" : "Ask anything..."}
+          placeholder={
+            busy
+              ? "Working…"
+              : voiceActive
+                ? voiceMode === "speaking"
+                  ? "Speaking — interrupt anytime"
+                  : voiceMode === "thinking"
+                    ? "Thinking…"
+                    : "Listening…"
+                : "Ask anything..."
+          }
           className="max-h-40 min-h-[44px] w-full resize-none bg-transparent px-1.5 py-2 text-[15px] leading-relaxed outline-none placeholder:text-[var(--text-3)]"
         />
         <div className="mt-1 flex items-center gap-1">
@@ -870,9 +893,10 @@ export function ChatComposer({
                 voiceActive ? "text-[var(--accent)]" : "text-[var(--text-2)] hover:text-[var(--text-1)]"
               }`}
             >
-              <Icon name="waveform" size={16} />
-              {voiceActive && (
-                <span className="absolute right-1.5 top-1.5 h-1.5 w-1.5 animate-pulse rounded-full bg-[var(--accent)]" />
+              {voiceActive ? (
+                <VoiceOrb mode={voiceMode} size={28} interactive={false} />
+              ) : (
+                <Icon name="waveform" size={16} />
               )}
             </button>
           </Tip>
@@ -958,6 +982,9 @@ interface ToolsMenuCtx {
   voice: string | null;
   voiceLabel: string;
   onVoice: (id: string) => void;
+  voiceModels: { id: string; label: string }[];
+  voiceModel: string | null;
+  onVoiceModel: (id: string) => void;
   instructionsOn: boolean;
   instrDraft: string;
   setInstrDraft: (v: string) => void;
@@ -1099,7 +1126,30 @@ function ToolsMenuBody({ variant, menu }: { variant: "plus" | "search"; menu: To
     return (
       <span className="block p-1.5">
         <MenuBack label={backLabel} onBack={() => menu.setView("menu")} />
-        {!menu.voiceCapable || !menu.voices.length ? (
+        <p className="px-2.5 pb-1 pt-1 text-[11px] font-semibold uppercase tracking-wide text-[var(--text-3)]">
+          Voice model
+        </p>
+        {menu.voiceModels.length === 0 ? (
+          <p className="px-2.5 py-2 text-[12px] leading-5 text-[var(--text-3)]">{menu.voiceHint}</p>
+        ) : (
+          menu.voiceModels.map((m) => (
+            <button
+              key={m.id}
+              type="button"
+              onClick={() => menu.onVoiceModel(m.id)}
+              className="press fluid flex w-full items-center gap-2 rounded-xl px-2.5 py-2 text-left hover:bg-[var(--panel-hover)]"
+            >
+              <span className="min-w-0 flex-1 truncate text-[13px] text-[var(--text-1)]">{m.label}</span>
+              {(menu.voiceModel ?? "") === m.id && (
+                <Icon name="check" size={14} className="shrink-0 text-[var(--accent)]" />
+              )}
+            </button>
+          ))
+        )}
+        <p className="px-2.5 pb-1 pt-2 text-[11px] font-semibold uppercase tracking-wide text-[var(--text-3)]">
+          Voice
+        </p>
+        {!menu.voices.length ? (
           <p className="px-2.5 py-2 text-[12px] leading-5 text-[var(--text-3)]">{menu.voiceHint}</p>
         ) : (
           menu.voices.map((v) => (

@@ -58,10 +58,10 @@ class Settings(BaseSettings):
     instrument_otel: bool = True
 
     # --- Model gateway ---
-    # Any pydantic-ai model string, e.g. openai:gpt-5.2, anthropic:claude-..., google-gla:...
+    # Any pydantic-ai model string, e.g. openai:gpt-5.2, anthropic:claude-..., google:gemini-2.5-flash
     # Special value "demo" runs a local echo model so the platform works without API keys.
-    default_model: str = "openai:gpt-5.2"
-    realtime_model: str = "openai:gpt-realtime"
+    default_model: str = "anthropic:claude-haiku-5-5"
+    realtime_model: str = "google:gemini-3.1-flash-live-preview"
 
     # --- Provider keys (also read natively by pydantic-ai) ---
     openai_api_key: str | None = None
@@ -79,7 +79,11 @@ class Settings(BaseSettings):
     require_plan_approval: bool = True
     # Platform-wide budgets (harness SpendLimits).
     daily_spend_limit_usd: float = 25.0
-    per_run_token_limit: int = 200_000
+    # A deep-research delegation (plan + several searches/fetches + synthesis)
+    # routinely needs more than 200k total tokens across the orchestrator and
+    # specialist, so the ceiling leaves room for a real research pass while
+    # still stopping runaway loops.
+    per_run_token_limit: int = 500_000
     # Compliance: redact PII (emails, phone numbers, SSNs, Luhn-valid card
     # numbers, IP addresses) from agent output. Toggle at runtime via
     # PATCH /api/policies (admin) without a restart.
@@ -170,7 +174,7 @@ class Settings(BaseSettings):
         model = self.realtime_model.lower()
         if model.startswith("openai") or model.startswith("azure"):
             return bool(self.openai_api_key)
-        if model.startswith("google"):
+        if model.startswith("google") or model.startswith("gemini"):
             return bool(self.google_api_key)
         if model.startswith("xai"):
             return bool(self.openai_api_key or self.anthropic_api_key or self.google_api_key)

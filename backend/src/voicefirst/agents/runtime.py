@@ -13,7 +13,12 @@ from typing import Any
 from pydantic_ai import Agent
 
 from voicefirst.agents.deps import AgentDeps
-from voicefirst.agents.factory import build_orchestrator, build_specialist, resolve_model
+from voicefirst.agents.factory import (
+    build_orchestrator,
+    build_specialist,
+    build_voice_companion,
+    resolve_model,
+)
 from voicefirst.control_plane.agent_access import AgentAccessService
 from voicefirst.control_plane.approvals import ApprovalService
 from voicefirst.control_plane.audit import AuditService
@@ -51,6 +56,7 @@ class AgentRuntime:
     mcp_registry: MCPRegistry
     orchestrator: Agent[AgentDeps, Any]
     realtime_orchestrator: Agent[AgentDeps, Any] | None = None
+    voice_companion: Agent[AgentDeps, Any] | None = None
     specialists: dict[str, Agent[AgentDeps, Any]] = field(default_factory=dict)
 
     @classmethod
@@ -164,7 +170,11 @@ class AgentRuntime:
             specialists=self.specialists,
             include_skills=False,
             plan_gate=False,
+            spoken=True,
         )
+        # Live speech only — Gemini/OpenAI realtime. Work is handed to the
+        # chat orchestrator in the background (see api/voice.py).
+        self.voice_companion = build_voice_companion(self.settings)
 
     async def close(self) -> None:
         await self.identity.close()

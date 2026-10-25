@@ -9,6 +9,8 @@ from voicefirst.control_plane.connections import (
     build_chat_model,
     build_realtime_model,
     models_for,
+    normalize_realtime_provider,
+    realtime_model_settings,
     supports,
 )
 from voicefirst.settings import Settings
@@ -44,6 +46,13 @@ def test_model_builders():
     assert "claude-sonnet-4-6" in model.model_name
     rt = build_realtime_model("openai", "sk-test", "gpt-realtime-2.1")
     assert "gpt-realtime" in str(rt)
+    gemini = build_realtime_model("google-gla", "test-gemini-key", "gemini-3.1-flash-live-preview")
+    assert "gemini" in str(gemini).lower() or gemini.model_name.startswith("gemini")
+    assert normalize_realtime_provider("google-gla") == "google"
+    gs = realtime_model_settings("google:gemini-3.1-flash-live-preview", None)
+    assert gs["google_voice"] == "Puck"
+    assert gs["google_vad"]["silence_duration_ms"] == 350
+    assert "google_affective_dialog" not in gs
     with pytest.raises(ValueError):
         build_realtime_model("anthropic", "key", "whatever")
 

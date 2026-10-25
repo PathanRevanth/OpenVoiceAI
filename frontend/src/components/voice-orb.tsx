@@ -1,93 +1,70 @@
 "use client";
 
 /**
- * VoiceOrb — the voice interaction affordance, built on a waveform motif.
- *
- * Idle: white disc with three static waveform bars.
- * Active: indigo glow, expanding ring, live equalizer bars. Click stops.
+ * Voice orb — thinking-orbs for the live speech layer.
+ * Idle is a still breathing globe; listening / thinking / speaking each
+ * get their own animation so the caller can see the two-layer loop.
  */
 
-import { Icon } from "@/components/icons";
+import { ThinkingOrb, type OrbState } from "thinking-orbs";
 
-export type OrbMode = "idle" | "listening" | "thinking" | "speaking" | "fallback";
+export type OrbMode = "idle" | "listening" | "thinking" | "speaking" | "fallback" | "connecting";
 
-const ACTIVE = new Set<OrbMode>(["listening", "thinking", "speaking", "fallback"]);
+const STATE: Record<OrbMode, OrbState> = {
+  idle: "breathing",
+  connecting: "connecting",
+  listening: "listening",
+  fallback: "listening",
+  thinking: "working",
+  speaking: "composing",
+};
 
-function Bars({ active, size }: { active: boolean; size: number }) {
-  const heights = [8, 13, 10].map((h) => (h * size) / 44);
-  return (
-    <span className="flex items-center gap-[3px]" style={{ height: size * 0.34 }}>
-      {heights.map((h, i) => (
-        <span
-          key={i}
-          className={`block w-[2.5px] rounded-full ${active ? "eq-bar text-[var(--accent-contrast)] bg-current" : "bg-[var(--text-3)]"}`}
-          style={{
-            height: h,
-            animationDelay: `${i * 150}ms`,
-            animationDuration: `${950 + i * 120}ms`,
-          }}
-        />
-      ))}
-    </span>
-  );
+export function voiceOrbState(mode: string): OrbState {
+  return STATE[(mode as OrbMode) || "idle"] ?? "breathing";
 }
 
 export function VoiceOrb({
   mode,
   size = 64,
   onClick,
+  interactive = true,
 }: {
   mode: string;
   size?: number;
   onClick?: () => void;
+  interactive?: boolean;
 }) {
-  const isActive = ACTIVE.has(mode as OrbMode);
-  const listening = mode === "listening" || mode === "fallback";
-
+  const isActive = mode !== "idle";
+  const orbSize: 64 | 32 | 20 = size >= 48 ? 64 : size >= 28 ? 32 : 20;
+  const scale = size / orbSize;
+  const inner = (
+    <span style={{ transform: scale === 1 ? undefined : `scale(${scale})` }}>
+      <ThinkingOrb
+        state={voiceOrbState(mode)}
+        size={orbSize}
+        theme="auto"
+        speed={isActive ? 1.15 : 0.7}
+        aria-label={isActive ? "Voice session" : "Start voice"}
+      />
+    </span>
+  );
+  const box = { width: size, height: size } as const;
+  if (!interactive) {
+    return (
+      <span className="grid shrink-0 place-items-center" style={box}>
+        {inner}
+      </span>
+    );
+  }
   return (
     <button
+      type="button"
       onClick={onClick}
       aria-label={isActive ? "Stop voice" : "Start voice"}
-      style={{ width: size, height: size }}
-      className="press fluid group relative grid shrink-0 place-items-center rounded-full outline-none"
+      className="press fluid grid shrink-0 place-items-center rounded-full outline-none"
+      style={box}
     >
-      {/* glow */}
-      <span
-        className={`fluid absolute inset-0 rounded-full ${
-          isActive ? "animate-breathe" : "group-hover:bg-[var(--panel-hover)]"
-        }`}
-        style={
-          isActive
-            ? {
-                background:
-                  "radial-gradient(circle at 50% 42%, rgba(79,70,229,0.30), rgba(79,70,229,0.04) 70%)",
-                boxShadow: "0 8px 32px rgba(79,70,229,0.28)",
-              }
-            : { boxShadow: "var(--shadow-card)" }
-        }
-      />
-
-      {/* expanding ring while listening */}
-      {listening && (
-        <span className="animate-ring absolute inset-0 rounded-full border-2 border-[var(--accent-border)]" />
-      )}
-
-      {/* core disc */}
-      <span
-        className="fluid relative grid h-[78%] w-[78%] place-items-center rounded-full border"
-        style={{
-          borderColor: isActive ? "var(--accent)" : "var(--hairline-strong)",
-          background: isActive ? "var(--accent)" : "var(--bg-raised)",
-        }}
-      >
-        {mode === "thinking" ? (
-          <Icon name="spark" size={size * 0.3} className="animate-breathe text-[var(--accent-contrast)]" />
-        ) : isActive && !listening ? (
-          <Icon name="stop" size={size * 0.28} className="text-[var(--accent-contrast)]" />
-        ) : (
-          <Bars active={listening} size={size} />
-        )}
-      </span>
+      {inner}
     </button>
   );
 }

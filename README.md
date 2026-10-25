@@ -31,7 +31,7 @@ orchestrator, every specialist agent, and the governance layer around them.
 | Layer          | Technology                                              |
 | -------------- | ------------------------------------------------------- |
 | Agents         | [Pydantic AI](https://pypi.org/project/pydantic-ai/) 2.35 + [Harness](https://pypi.org/project/pydantic-ai-harness/) 0.27 + [Skills](https://pypi.org/project/pydantic-ai-skills/) 1.4 |
-| Voice          | `pydantic_ai.realtime` (OpenAI gpt-realtime / Gemini Live / Grok Voice) |
+| Voice          | `pydantic_ai.realtime` (Gemini Live / OpenAI gpt-realtime) — speech only. Chat orchestrator (Anthropic by default) does the work in the background. |
 | API            | FastAPI 0.141, SSE streaming, WebSocket voice bridge     |
 | Persistence    | SQLAlchemy 2 async (SQLite dev / PostgreSQL prod)        |
 | Observability  | Logfire 4.41 (OpenTelemetry)                             |

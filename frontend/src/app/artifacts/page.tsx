@@ -133,7 +133,7 @@ function ArtifactsInner() {
     if (!sources) return [];
     const out: IndexedArtifact[] = [];
     for (const msg of sources) {
-      for (const seg of parseSegments(msg.text, msg.message_id)) {
+      for (const seg of parseSegments(msg.text, msg.message_id, true)) {
         if (seg.type !== "artifact") continue;
         out.push({
           id: `${msg.conversation_id}:${seg.artifact.id}`,

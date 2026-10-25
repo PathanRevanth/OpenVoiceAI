@@ -4,7 +4,11 @@ from __future__ import annotations
 
 import pytest
 
-from voicefirst.api.enrichment import build_followups, extract_sources
+from voicefirst.api.enrichment import (
+    build_followups,
+    extract_sources,
+    native_web_evidence,
+)
 from voicefirst.api.schemas import ConversationRename, RunFeedbackIn
 from voicefirst.db.models import ConversationShareRecord, RunFeedbackRecord, new_id
 from voicefirst.db.session import Database
@@ -38,6 +42,44 @@ def test_extract_sources_caps_at_eight_and_ignores_non_http():
     text = " ".join(f"https://example.com/{i}" for i in range(20))
     assert len(extract_sources(text, None)) == 8
     assert extract_sources("not a link (notaurl) ftp://example.com/x", None) == []
+
+
+def test_native_web_search_returns_detected_as_sources():
+    from pydantic_ai.messages import ModelResponse, NativeToolCallPart, NativeToolReturnPart
+
+    response = ModelResponse(
+        parts=[
+            NativeToolCallPart(tool_name="web_search", args={"query": "pydantic-ai pypi"}),
+            NativeToolReturnPart(
+                tool_name="web_search",
+                content=[
+                    {"type": "web_search_result", "url": "https://pypi.org/project/pydantic-ai/", "title": "PyPI"},
+                    {"type": "web_search_result", "url": "https://example.com/release", "title": "Release"},
+                    {"type": "web_search_result", "title": "no url"},
+                ],
+            ),
+        ]
+    )
+    used, results = native_web_evidence([response])
+    assert used is True
+    assert results == [
+        {"url": "https://pypi.org/project/pydantic-ai/", "title": "PyPI"},
+        {"url": "https://example.com/release", "title": "Release"},
+    ]
+
+    sources = extract_sources("Cited: https://pypi.org/project/pydantic-ai/", None, results)
+    assert [s["url"] for s in sources] == [
+        "https://pypi.org/project/pydantic-ai/",
+        "https://example.com/release",
+    ]
+
+
+def test_native_web_evidence_ignores_non_web_native_tools():
+    from pydantic_ai.messages import ModelResponse, NativeToolCallPart
+
+    response = ModelResponse(parts=[NativeToolCallPart(tool_name="tool_search", args={})])
+    assert native_web_evidence([response]) == (False, [])
+    assert native_web_evidence(None) == (False, [])
 
 
 def test_build_followups_are_contextual_and_stable():

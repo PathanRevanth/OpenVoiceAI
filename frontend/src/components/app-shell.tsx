@@ -510,7 +510,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         <aside
           className={`fixed inset-y-0 left-0 z-30 flex flex-col border-r border-[var(--glass-border)] bg-[var(--glass-bg)] backdrop-blur-2xl transition-[width,transform] duration-300 ease-[var(--ease)] lg:sticky lg:top-0 lg:h-dvh lg:translate-x-0 ${
             collapsed ? "w-[68px]" : "w-[264px]"
-          } ${mobileOpen ? "translate-x-0" : "-translate-x-full"}`}
+          } ${
+            // Off-canvas on small screens: `invisible` keeps the closed drawer
+            // out of the tab order and the accessibility tree, so its buttons
+            // can't be activated while they're parked off-screen.
+            mobileOpen ? "visible translate-x-0" : "invisible -translate-x-full lg:visible"
+          }`}
         >
           {/* brand */}
           <div className="flex h-14 items-center gap-2.5 px-4">

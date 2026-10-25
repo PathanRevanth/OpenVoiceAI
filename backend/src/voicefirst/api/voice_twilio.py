@@ -144,11 +144,17 @@ async def twilio_media_stream(ws: WebSocket) -> None:
                 stream_sid = (frame.get("start") or {}).get("streamSid")
                 if settings.has_realtime_key:
                     try:
-                        voice_model = await runtime.connections.resolve_voice_model(deps.user_id)
-                        realtime_agent = (
-                            runtime.orchestrator.realtime(voice_model, deps=deps)
-                            if voice_model is not None
-                            else runtime.orchestrator.realtime(settings.realtime_model, deps=deps)
+                        resolved = await runtime.connections.resolve_session_realtime(
+                            deps.user_id, None, settings
+                        )
+                        if resolved is None:
+                            raise RuntimeError("no realtime model available")
+                        voice_model, model_str = resolved
+                        from voicefirst.control_plane.connections import realtime_model_settings
+
+                        rt_agent = getattr(runtime, "realtime_orchestrator", None) or runtime.orchestrator
+                        realtime_agent = rt_agent.realtime(
+                            voice_model, deps=deps, model_settings=realtime_model_settings(model_str, None)
                         )
                         session = await stack.enter_async_context(realtime_agent.session())
                         import asyncio
@@ -160,7 +166,7 @@ async def twilio_media_stream(ws: WebSocket) -> None:
                             user_id=deps.user_id,
                             channel="twilio",
                             provider="twilio",
-                            model=settings.realtime_model,
+                            model=model_str,
                         )
                         voice_started_mono = asyncio.get_running_loop().time()
                         voice_metrics.update({"turns": 0, "barge_ins": 0, "ttfw_ms": None, "last_speaker": None})

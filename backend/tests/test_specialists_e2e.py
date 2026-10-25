@@ -362,6 +362,66 @@ async def test_orchestrator_delegates_end_to_end():
     assert isinstance(result.output, str) and len(result.output) > 0
 
 
+async def test_delegation_result_survives_tool_output_limits():
+    """A specialist deliverable larger than the 20k truncation band reaches the
+    orchestrator intact. Regression: marketing-page HTML was cut to 4k at the
+    delegate_task boundary, leaving an unusable half-finished artifact."""
+    from pydantic_ai.messages import ModelResponse, TextPart, ToolCallPart, ToolReturnPart
+    from pydantic_ai.models.function import FunctionModel
+
+    from voicefirst.agents.factory import build_orchestrator, build_specialist
+
+    settings = get_settings().model_copy(update={"native_web_tools": False, "code_mode_enabled": False})
+    engine = PolicyEngine()
+    deliverable = "<html>" + ("x" * 25_000) + "</html>"
+
+    def specialist_reply(*_args: Any) -> ModelResponse:
+        return ModelResponse(parts=[TextPart(content=deliverable)])
+
+    async def specialist_stream(*_args: Any):
+        # Sub-agent runs stream (they forward events), so the fake model needs
+        # a stream path as well as a request-response path.
+        yield deliverable
+
+    specialist = build_specialist(
+        "marketing",
+        FunctionModel(specialist_reply, stream_function=specialist_stream),
+        engine,
+        settings,
+    )
+
+    seen: list[str] = []
+
+    def orchestrator_model(messages: list[Any], _info: Any = None) -> ModelResponse:
+        if not seen:
+            for message in messages:
+                for part in getattr(message, "parts", []):
+                    if isinstance(part, ToolReturnPart) and part.tool_name == "delegate_task":
+                        seen.append(str(part.content))
+        if seen:
+            return ModelResponse(parts=[TextPart(content="delegation complete")])
+        return ModelResponse(
+            parts=[
+                ToolCallPart(
+                    tool_name="delegate_task",
+                    args={"agent_name": "marketing", "task": "Build the page."},
+                    tool_call_id="call-1",
+                )
+            ]
+        )
+
+    agent = build_orchestrator(
+        FunctionModel(orchestrator_model),
+        engine,
+        settings,
+        specialists={"marketing": specialist},
+    )
+    result = await agent.run("Delegate the page build.", deps=_deps())
+    assert isinstance(result.output, str)
+    assert seen, "delegate_task never returned to the orchestrator"
+    assert deliverable in seen[0]
+
+
 async def test_input_guardrail_blocks_injection_through_agent():
     """The injection guardrail fires inside the real agent run, not just in
     isolation."""

@@ -73,3 +73,8 @@ package-lock.json
 # Pycache
 *.pyc
 .python-version
+.vercel
+
+# Local scratch
+tmp_*
+*.out

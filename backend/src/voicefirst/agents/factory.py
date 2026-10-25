@@ -16,6 +16,9 @@ zero credentials. Tests use `TestModel` to exercise real tool flows.
 
 from __future__ import annotations
 
+import hashlib
+import logging
+import re
 from decimal import Decimal
 from pathlib import Path
 from typing import Any
@@ -39,7 +42,10 @@ from voicefirst.agents.tools.mongodb import mongodb_tools
 from voicefirst.agents.tools.research import fetch_page, research_tools, search_web
 from voicefirst.agents.tools.slack import slack_tools
 from voicefirst.control_plane.registry import AgentRegistry
+from voicefirst.pricing import price_model_response
 from voicefirst.settings import Settings
+
+logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # Model resolution
@@ -152,26 +158,131 @@ _SPECIALIST_FALLBACK_INSTRUCTIONS = {
 # ---------------------------------------------------------------------------
 
 
-def _tool_output_limits_capability() -> Any:
+# Room for complete deliverables (HTML pages, reports, generated code).
+# Providers otherwise fall back to ~4k output tokens, which silently cuts a
+# streamed artifact off mid-tag.
+DEFAULT_MAX_OUTPUT_TOKENS = 16_384
+# Anthropic requires max_tokens above the thinking budget (16k at "high").
+THINKING_MAX_OUTPUT_TOKENS = 32_768
+
+# Sub-agent deliverables must survive verbatim: they are the artifact body the
+# orchestrator re-emits, so truncating them (even head+tail) breaks the result.
+_DELEGATION_TOOL_NAMES = ("delegate_task", "run_workflow")
+
+
+def _output_token_settings(settings: Settings) -> dict[str, Any]:
+    """Output cap for agents that are not driven by a run-level override."""
+    level = (getattr(settings, "thinking_level", "off") or "off").lower()
+    cap = THINKING_MAX_OUTPUT_TOKENS if level != "off" else DEFAULT_MAX_OUTPUT_TOKENS
+    return {"max_tokens": cap}
+
+
+def _tool_output_limits_capability(*, preserve_delegation: bool = False) -> Any:
     """Truncate oversized tool returns (head+tail, 20k → 4k chars) so one huge
-    payload can't dominate history and get re-sent on every later request."""
-    from pydantic_ai_harness.tool_output_limits import Band, ToolOutputLimits, Truncate
+    payload can't dominate history and get re-sent on every later request.
 
-    return ToolOutputLimits(bands=[Band(over=20_000, action=Truncate(max_chars=4_000))])
+    `preserve_delegation` exempts the orchestrator's `delegate_task` and
+    `run_workflow` returns: those carry specialist deliverables (often a whole
+    HTML document), and truncation leaves an unusable, half-finished artifact.
+    """
+    from pydantic_ai_harness.tool_output_limits import (
+        Band,
+        Passthrough,
+        ToolOutputLimits,
+        Truncate,
+    )
+
+    return ToolOutputLimits(
+        bands=[Band(over=20_000, action=Truncate(max_chars=4_000))],
+        per_tool=(
+            {name: [Band(over=0, action=Passthrough())] for name in _DELEGATION_TOOL_NAMES}
+            if preserve_delegation
+            else {}
+        ),
+    )
 
 
-def _prompt_injection_defender_capability(settings: Settings) -> Any:
+_WEB_RESULT_TOOLS = frozenset(
+    {
+        "web_search",
+        "web_fetch",
+        "research_search_web",
+        "research_fetch_page",
+        "duckduckgo_search",
+        "search_web",
+        "fetch_page",
+    }
+)
+
+# The harness default ("for multi-step work") is easy for the model to skip.
+# Research requests that compare products or span several sub-questions should
+# always get an explicit plan; it also gives the UI live task events.
+_RESEARCH_PLANNING_GUIDANCE = (
+    "Before the first search, call `write_plan` whenever the request compares two or more "
+    "things, asks for a report or memo, or contains multiple sub-questions. Use one task per "
+    "sub-question plus a final synthesis task, keep exactly one task in_progress, and mark "
+    "tasks completed as their evidence is gathered. The plan is internal: never mention it, "
+    "its tasks, or its statuses in the final answer."
+)
+
+
+def _prompt_injection_defender_capabilities(settings: Settings) -> list[Any]:
     """Scan TOOL RESULTS for injected instructions (the input guardrail only
     covers user input — a poisoned GitHub README or Slack message reaches the
-    model as tool output). High-risk findings block the tool result."""
+    model as tool output).
+
+    Two scopes, because the right failure mode differs by tool:
+
+    * Tools that can drive actions (GitHub/Slack/MongoDB) keep hard blocking:
+      a high-risk result is replaced so its instructions never reach the model.
+    * Read-only web tools only report. Web pages are untrusted by nature, the
+      provider-native web tools bypass this hook entirely, and the pattern
+      scanner false-positives on ordinary prose (PyPI trips
+      `confusable_homoglyphs` on phonetic characters), which would withhold a
+      whole source without removing the attack surface. The research skill
+      frames fetched text as data, never instructions, and Tier 1 findings are
+      still logged for operators.
+    """
     if not getattr(settings, "injection_defender_enabled", True):
-        return None
+        return []
     try:
         from pydantic_ai_harness.prompt_injection_defender import PromptInjectionDefender
-
-        return PromptInjectionDefender(block_high_risk=True)
     except ImportError:  # pragma: no cover - extra missing; input guardrail still active
-        return None
+        return []
+
+    def _is_web_tool(_ctx: Any, tool_def: Any) -> bool:
+        return tool_def.name in _WEB_RESULT_TOOLS
+
+    def _is_not_web_tool(_ctx: Any, tool_def: Any) -> bool:
+        return tool_def.name not in _WEB_RESULT_TOOLS
+
+    def _log_web_finding(_ctx: Any, call: Any, verdict: Any) -> None:
+        detections = ", ".join(verdict.detections) or "no named detections"
+        if verdict.risk_level in ("high", "critical"):
+            logger.warning(
+                "read-only %s result flagged as %s (%s); passing it through as untrusted data",
+                call.tool_name,
+                verdict.risk_level,
+                detections,
+            )
+        else:
+            logger.debug(
+                "read-only %s result flagged as %s (%s)",
+                call.tool_name,
+                verdict.risk_level,
+                detections,
+            )
+
+    return [
+        PromptInjectionDefender(block_high_risk=True, tool_filter=_is_not_web_tool),
+        # Report-only scan: `block_high_risk=False` keeps the page intact while
+        # `on_detection` preserves the audit signal.
+        PromptInjectionDefender(
+            block_high_risk=False,
+            tool_filter=_is_web_tool,
+            on_detection=_log_web_finding,
+        ),
+    ]
 
 
 def _step_persistence_capability(agent_name: str, settings: Settings) -> Any:
@@ -215,8 +326,13 @@ def _system_reminders_capability(settings: Settings, reminders: list[Any]) -> An
 def _code_mode_capability(slug: str, settings: Settings) -> Any:
     """Code mode for the data-heavy specialists: the model can route tool
     results through sandboxed Python (monty) — analysis, reshaping, and math
-    happen in one step instead of many model round-trips."""
-    if slug not in ("mongodb", "github", "research") or not getattr(settings, "code_mode_enabled", True):
+    happen in one step instead of many model round-trips.
+
+    Research is deliberately excluded: code mode folds every function tool
+    (including `write_plan` and the local web tools) into `run_code`, which
+    contradicts the planning guidance and makes direct research calls fail.
+    """
+    if slug not in ("mongodb", "github") or not getattr(settings, "code_mode_enabled", True):
         return None
     try:
         from pydantic_ai_harness.code_mode import CodeMode
@@ -274,6 +390,16 @@ def _thinking_capability(settings: Settings) -> Any:
     return Thinking(effort=level)  # type: ignore[arg-type]
 
 
+def _spend_limits(settings: Settings) -> SpendLimits:
+    return SpendLimits(
+        budgets=[
+            Budget(usd=Decimal(str(settings.daily_spend_limit_usd)), window="day", name="platform-daily"),
+            Budget(tokens=settings.per_run_token_limit, window="run", name="per-run-tokens"),
+        ],
+        price=price_model_response,
+    )
+
+
 def build_specialist(
     slug: str,
     model: Any,
@@ -314,19 +440,26 @@ def build_specialist(
         policy_engine.input_guardrail(),
         policy_engine.output_guardrail(),
         policy_engine.tool_guardrail(),
-        _prompt_injection_defender_capability(settings),
+        *_prompt_injection_defender_capabilities(settings),
         _tool_output_limits_capability(),
         _step_persistence_capability(slug, settings),
         _warn_on_cache_busts_capability(settings),
         SlidingWindowCompaction(max_messages=80),
+        # Deep research is multi-step and long-running: give the specialist its
+        # own task plan so it can decompose a question, track source gathering,
+        # and resume coherently after compaction. The 1h TTL matches
+        # SystemReminders: Anthropic rejects a 1h cache block that follows a 5m
+        # one in the same request.
+        Planning(
+            enable_subtasks=True,
+            guidance=_RESEARCH_PLANNING_GUIDANCE,
+            cache_ttl="1h",
+        )
+        if slug == "research"
+        else None,
         _thinking_capability(settings),
         _code_mode_capability(slug, settings),
-        SpendLimits(
-            budgets=[
-                Budget(usd=Decimal(str(settings.daily_spend_limit_usd)), window="day", name="platform-daily"),
-                Budget(tokens=settings.per_run_token_limit, window="run", name="per-run-tokens"),
-            ]
-        ),
+        _spend_limits(settings),
         *extra_capabilities,
     ]
     if slug == "research":
@@ -350,6 +483,7 @@ def build_specialist(
         retries=2,  # transient tool failures become retry prompts, not run failures
         tool_timeout=60,
         max_concurrency=settings.agent_max_concurrency,
+        model_settings=_output_token_settings(settings),
         capabilities=[c for c in capabilities if c is not None],
     )
 
@@ -450,6 +584,7 @@ def build_orchestrator(
     demo: bool = False,
     include_skills: bool = True,
     plan_gate: bool = True,
+    spoken: bool = False,
 ) -> Agent[AgentDeps, Any]:
     """Build the main orchestrator with delegation, planning, and governance.
 
@@ -475,6 +610,21 @@ def build_orchestrator(
         "Delegate with `delegate_task` to the matching specialist. Never call domain "
         "tools yourself — that is the specialists' job."
     )
+    if spoken:
+        instructions = (
+            f"{instructions}\n\n## Voice session\n\n"
+            "You are speaking out loud over Gemini Live. Sound like a capable colleague, "
+            "not a document.\n"
+            "- Answer first in one or two short sentences, then add only the detail the "
+            "caller asked for.\n"
+            "- No markdown, bullets, code fences, tables, or URLs unless the caller "
+            "explicitly wants them read.\n"
+            "- Spell out numbers, names, and tool results so they are easy to hear.\n"
+            "- When you delegate, say what you are doing in a clause: "
+            "\"I'll check GitHub for that.\"\n"
+            "- If you need a clarification, ask one spoken question and wait.\n"
+            "- Keep turns under about 20 seconds unless the caller asked for a briefing."
+        )
 
     sub_agents = [
         SubAgent(
@@ -492,26 +642,21 @@ def build_orchestrator(
         policy_engine.input_guardrail(),
         policy_engine.output_guardrail(),
         policy_engine.tool_guardrail(),
-        _prompt_injection_defender_capability(settings),
+        *_prompt_injection_defender_capabilities(settings),
         SubAgents(
             agents=sub_agents,
             forward_usage=True,
             contain_errors=True,
             event_stream_handler=_sub_agent_span_handler,
         ),
-        Planning(enable_subtasks=True)
+        Planning(enable_subtasks=True, cache_ttl="1h")
         if (not plan_gate) or (not settings.require_plan_approval)
-        else PlanGatedPlanning(enable_subtasks=True),
-        SpendLimits(
-            budgets=[
-                Budget(usd=Decimal(str(settings.daily_spend_limit_usd)), window="day", name="platform-daily"),
-                Budget(tokens=settings.per_run_token_limit, window="run", name="per-run-tokens"),
-            ]
-        ),
+        else PlanGatedPlanning(enable_subtasks=True, cache_ttl="1h"),
+        _spend_limits(settings),
         SlidingWindowCompaction(max_messages=120),
         ClearToolResults(max_fraction=0.7, keep_pairs=3),
         build_memory_capability(settings),
-        _tool_output_limits_capability(),
+        _tool_output_limits_capability(preserve_delegation=True),
         _thinking_capability(settings),
         _step_persistence_capability("orchestrator", settings),
         _warn_on_cache_busts_capability(settings),
@@ -559,8 +704,25 @@ def build_orchestrator(
         retries=2,
         tool_timeout=120,
         max_concurrency=settings.agent_max_concurrency,
+        model_settings=_output_token_settings(settings),
         capabilities=capabilities,
     )
+
+
+def _memory_user_segment(user_id: str) -> str:
+    """Map a user id to a Memory-store path segment.
+
+    Memory paths only accept ``[A-Za-z0-9_.-]``, so OIDC-style ids containing
+    ``@`` (or other punctuation) would otherwise fail every orchestrator run
+    with ``invalid memory path``. Already-valid ids pass through unchanged so
+    existing memories keep their paths; invalid ones are sanitized and get a
+    short digest suffix so two ids cannot collide after sanitization.
+    """
+    if re.fullmatch(r"[A-Za-z0-9_.-]{1,200}", user_id) and ".." not in user_id:
+        return user_id
+    safe = re.sub(r"[^A-Za-z0-9_.-]", "_", user_id)[:160].replace("..", "__") or "anon"
+    digest = hashlib.sha256(user_id.encode("utf-8")).hexdigest()[:16]
+    return f"{safe}-{digest}"
 
 
 def build_memory_capability(settings: Settings) -> Any:
@@ -573,7 +735,8 @@ def build_memory_capability(settings: Settings) -> Any:
     return Memory(
         store=SqliteMemoryStore(database=store_path),
         agent_name="orchestrator",
-        namespace=lambda ctx: "users/" + str(getattr(getattr(ctx, "deps", None), "user_id", "anon")),
+        namespace=lambda ctx: "users/"
+        + _memory_user_segment(str(getattr(getattr(ctx, "deps", None), "user_id", "anon"))),
         max_tokens=1200,
         max_memory_size=32768,
     )
@@ -592,7 +755,7 @@ def capability_catalog() -> dict[str, str]:
         "tool_output_limits": "oversized tool returns truncated to protect context (harness ToolOutputLimits)",
         "thinking": "optional model reasoning control (pydantic-ai Thinking)",
         "conversation_search": "search the operator's past conversations for cross-session context",
-        "injection_defender": "tool-result prompt-injection scanning (harness PromptInjectionDefender)",
+        "injection_defender": "tool-result prompt-injection scanning (blocks action-tool results; reports web-page findings)",
         "step_persistence": "durable per-step event log, continuable snapshots, tool-effect ledger (harness StepPersistence)",
         "cache_bust_monitor": "warns when the prompt-cache prefix collapses (harness WarnOnCacheBusts)",
         "media_offload": "oversized attachment parts offloaded to a content-addressed store (harness media)",
@@ -601,6 +764,41 @@ def capability_catalog() -> dict[str, str]:
         "advisor": "second-model critique before risky decisions (harness Advisor)",
         "capability_creation": "agent-drafted capabilities, admin-gated in Agent Studio (harness CapabilityCreation)",
     }
+
+
+def build_voice_companion(settings: Settings) -> Agent[AgentDeps, Any]:
+    """Conversational speech agent for Gemini Live / OpenAI Realtime.
+
+    No specialist tools. The voice model talks; the chat orchestrator does the
+    work in the background and the control plane feeds spoken cues back in.
+    """
+    model = resolve_model(settings)
+    return Agent(
+        model,
+        deps_type=AgentDeps,
+        name="voice-companion",
+        instructions=(
+            "You are the live voice of Voice-First AI. You are in a real-time "
+            "spoken conversation.\n\n"
+            "Another model — the orchestrator — is doing the actual work "
+            "(artifacts, GitHub, research, marketing) in the background while "
+            "you talk. You do not have those tools.\n\n"
+            "Sound like a capable colleague:\n"
+            "- Answer first in one or two short sentences.\n"
+            "- No markdown, bullets, code, or URLs unless the caller asks you "
+            "to read them.\n"
+            "- When they ask for work (design this, change the colour, search "
+            "GitHub), acknowledge and keep the floor open. The control plane "
+            "will send you a spoken update when the result is ready — then "
+            "read that update naturally.\n"
+            "- If they change their mind mid-task, acknowledge the new "
+            "direction. Do not argue.\n"
+            "- Never invent tool results, files, or artifact contents.\n"
+            "- Keep turns under about 15 seconds unless they asked for a briefing."
+        ),
+        output_type=str,
+        retries=1,
+    )
 
 
 def conversation_search_tool() -> Any:

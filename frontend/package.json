@@ -23,7 +23,8 @@
     "react": "19.2.8",
     "react-dom": "19.2.8",
     "streamdown": "^2.6.0",
-    "tailwind-merge": "^3.6.0"
+    "tailwind-merge": "^3.6.0",
+    "thinking-orbs": "^0.3.2"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",

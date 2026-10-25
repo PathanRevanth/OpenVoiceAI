@@ -74,6 +74,7 @@ export function ArtifactPanel({ artifacts, activeId, onSelect, onClose }: Artifa
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState("");
   const markdownRef = useRef<HTMLDivElement>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
 
   const shown = useMemo(() => {
     if (!active) return null;
@@ -84,7 +85,7 @@ export function ArtifactPanel({ artifacts, activeId, onSelect, onClose }: Artifa
   }, [active, versions, versionIdx]);
   const versionCount = (active && versions[active.id]?.length) || 1;
 
-  const frameDoc = useMemo(() => (shown ? frameSource(shown) : ""), [shown]);
+  const frameDoc = useMemo(() => (shown ? withPreviewScrollReset(frameSource(shown)) : ""), [shown]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -93,6 +94,12 @@ export function ArtifactPanel({ artifacts, activeId, onSelect, onClose }: Artifa
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose]);
+
+  // Start every artifact and view at its top. Switching from a long streamed
+  // source to the rendered preview otherwise keeps the old scroll offset.
+  useEffect(() => {
+    scrollRef.current?.scrollTo({ top: 0 });
+  }, [activeId, view, editing, versionIdx]);
 
   if (!active || !shown) return null;
 
@@ -221,7 +228,7 @@ export function ArtifactPanel({ artifacts, activeId, onSelect, onClose }: Artifa
         </div>
       )}
 
-      <div className="min-h-0 flex-1 overflow-auto">
+      <div ref={scrollRef} className="min-h-0 flex-1 overflow-auto">
         {editing ? (
           <div className="flex h-full flex-col p-4">
             <textarea
@@ -294,7 +301,7 @@ function Preview({
           title={artifact.title}
           sandbox="allow-scripts"
           srcDoc={frameDoc}
-          className="h-full min-h-[480px] w-full bg-white"
+          className="block h-full w-full bg-white"
         />
       );
   }
@@ -394,12 +401,29 @@ function PdfPreview({ artifact }: { artifact: Artifact }) {
     }
   }, [artifact.content]);
   if (!src) return <p className="p-6 text-[12px] text-[var(--danger)]">This PDF payload is not valid base64.</p>;
-  return <iframe title={artifact.title} src={src} className="h-full min-h-[600px] w-full bg-white" />;
+  return <iframe title={artifact.title} src={src} className="block h-full w-full bg-white" />;
 }
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
+
+/**
+ * Generated pages sometimes restore or inherit a scroll offset when their
+ * frame is remounted. Previews should always open at the top, so the frame
+ * document resets itself after parsing and again after load.
+ */
+const PREVIEW_SCROLL_RESET =
+  '<script>(function(){function top(){try{window.scrollTo(0,0);}catch(e){}}' +
+  'top();document.addEventListener("DOMContentLoaded",top);' +
+  'addEventListener("load",function(){top();requestAnimationFrame(top);});})();</script>';
+
+function withPreviewScrollReset(doc: string): string {
+  if (!doc) return doc;
+  return /<\/body\s*>/i.test(doc)
+    ? doc.replace(/<\/body\s*>/i, `${PREVIEW_SCROLL_RESET}</body>`)
+    : `${doc}${PREVIEW_SCROLL_RESET}`;
+}
 
 function frameSource(artifact: Artifact): string {
   switch (artifact.kind) {

@@ -12,6 +12,7 @@ import Database from "better-sqlite3";
  */
 export const auth = betterAuth({
   database: new Database("./voicefirst.auth.db"),
+  secret: process.env.BETTER_AUTH_SECRET ?? "voicefirst-local-dev-secret-change-me",
   emailAndPassword: {
     enabled: true,
     autoSignIn: true,
@@ -42,6 +43,10 @@ export const auth = betterAuth({
       defaultRole: "viewer",
       adminRole: "admin",
     }),
-    jwt(),
+    jwt({
+      // Local SQLite JWKS is encrypted with BETTER_AUTH_SECRET. If that secret
+      // changes (or was never pinned), get-session 500s with a decrypt error.
+      jwks: { disablePrivateKeyEncryption: true },
+    }),
   ],
 });

@@ -47,20 +47,25 @@ CHAT_MODELS: dict[str, list[dict[str, str]]] = {
         {"id": "gpt-5", "label": "GPT-5", "tag": ""},
     ],
     "anthropic": [
-        {"id": "claude-opus-5", "label": "Claude Opus 5", "tag": "Flagship"},
-        {"id": "claude-sonnet-5", "label": "Claude Sonnet 5", "tag": "Agentic"},
-        {"id": "claude-fable-5", "label": "Claude Fable 5", "tag": "Adaptive"},
-        {"id": "claude-mythos-5", "label": "Claude Mythos 5", "tag": ""},
-        {"id": "claude-haiku-4-5", "label": "Claude Haiku 4.5", "tag": "Fast"},
-        {"id": "claude-sonnet-4-6", "label": "Claude Sonnet 4.6", "tag": ""},
+        {"id": "claude-opus-5-5", "label": "Claude Opus 5.5", "tag": "Flagship"},
+        {"id": "claude-sonnet-5-5", "label": "Claude Sonnet 5.5", "tag": "Agentic"},
+        {"id": "claude-haiku-5-5", "label": "Claude Haiku 5.5", "tag": "Fast"},
+        {"id": "claude-fable-5-1", "label": "Claude Fable 5.1", "tag": "Adaptive"},
+        {"id": "claude-opus-5", "label": "Claude Opus 5", "tag": ""},
+        {"id": "claude-sonnet-5", "label": "Claude Sonnet 5", "tag": ""},
+        {"id": "claude-fable-5", "label": "Claude Fable 5", "tag": ""},
         {"id": "claude-opus-4-8", "label": "Claude Opus 4.8", "tag": ""},
+        {"id": "claude-sonnet-4-6", "label": "Claude Sonnet 4.6", "tag": ""},
+        {"id": "claude-haiku-4-5", "label": "Claude Haiku 4.5", "tag": ""},
     ],
     "google": [
-        {"id": "gemini-3.7-flash", "label": "Gemini 3.7 Flash", "tag": "Newest"},
-        {"id": "gemini-3.1-pro-preview", "label": "Gemini 3.1 Pro", "tag": "Flagship"},
+        {"id": "gemini-4-argon", "label": "Gemini 4 Argon", "tag": "Newest"},
+        {"id": "gemini-3.8-flash", "label": "Gemini 3.8 Flash", "tag": ""},
+        {"id": "gemini-3.7-flash", "label": "Gemini 3.7 Flash", "tag": ""},
         {"id": "gemini-3.6-flash", "label": "Gemini 3.6 Flash", "tag": ""},
         {"id": "gemini-3.5-flash", "label": "Gemini 3.5 Flash", "tag": ""},
-        {"id": "gemini-3.5-flash-lite", "label": "Gemini 3.5 Flash Lite", "tag": "Fast"},
+        {"id": "gemini-3.1-pro-preview", "label": "Gemini 3.1 Pro", "tag": "Flagship"},
+        {"id": "gemini-3.1-flash-lite", "label": "Gemini 3.1 Flash Lite", "tag": "Fast"},
         {"id": "gemini-2.5-pro", "label": "Gemini 2.5 Pro", "tag": ""},
         {"id": "gemini-2.5-flash", "label": "Gemini 2.5 Flash", "tag": ""},
     ],
@@ -73,8 +78,9 @@ VOICE_MODELS: dict[str, list[dict[str, str]]] = {
         {"id": "gpt-realtime", "label": "GPT Realtime", "tag": ""},
     ],
     "google": [
-        {"id": "gemini-3.1-flash-live-preview", "label": "Gemini 3.1 Flash Live", "tag": "Newest"},
-        {"id": "gemini-2.5-flash-native-audio-latest", "label": "Gemini 2.5 Native Audio", "tag": "Stable"},
+        {"id": "gemini-3.8-live", "label": "Gemini 3.8 Live", "tag": "Newest"},
+        {"id": "gemini-3.1-flash-live-preview", "label": "Gemini 3.1 Flash Live", "tag": "Recommended"},
+        {"id": "gemini-2.5-flash-native-audio-latest", "label": "Gemini 2.5 Native Audio", "tag": "Slow"},
     ],
     # Anthropic has no realtime speech-to-speech API.
 }
@@ -219,8 +225,30 @@ def build_chat_model(provider: str, key: str, model: str) -> Any:
     raise ValueError(f"unsupported chat provider: {provider}")
 
 
+def normalize_realtime_provider(provider: str) -> str:
+    """Map catalog / pydantic-ai prefixes onto a realtime constructor."""
+    name = (provider or "").split(":", 1)[0].lower()
+    if name in ("google", "google-gla", "google-cloud", "gemini"):
+        return "google"
+    if name in ("openai", "azure"):
+        return "openai"
+    return name
+
+
+def default_realtime_model_id(provider: str) -> str:
+    if normalize_realtime_provider(provider) == "google":
+        # Gemini 3.1 Flash Live is the low-latency live model (~0.5s to first
+        # audio). The 2.5 native-audio model takes 3s+ and makes the conversation
+        # feel like a walkie-talkie.
+        return "gemini-3.1-flash-live-preview"
+    if normalize_realtime_provider(provider) == "openai":
+        return "gpt-realtime"
+    return provider
+
+
 def build_realtime_model(provider: str, key: str, model: str) -> Any:
     """Construct a pydantic-ai realtime (speech-to-speech) model."""
+    provider = normalize_realtime_provider(provider)
     if provider == "openai":
         from pydantic_ai.providers.openai import OpenAIProvider
         from pydantic_ai.realtime.openai import OpenAIRealtimeModel
@@ -232,6 +260,39 @@ def build_realtime_model(provider: str, key: str, model: str) -> Any:
 
         return GoogleRealtimeModel(model, provider=GoogleProvider(api_key=key))
     raise ValueError(f"unsupported realtime provider: {provider}")
+
+
+def realtime_model_settings(model_str: str, voice: str | None) -> dict[str, Any]:
+    """Provider-native speech settings for a pydantic-ai realtime session."""
+    provider = normalize_realtime_provider(model_str)
+    if provider == "openai":
+        settings: dict[str, Any] = {}
+        if voice:
+            settings["openai_voice"] = voice
+        return settings
+    if provider == "google":
+        # Tuned for conversational turn-taking, not dictation:
+        # * 350ms of silence ends the caller's turn (the provider default is
+        #   ~800ms — that alone is the difference between "instant" and "laggy").
+        # * Activity interrupts the model server-side, which is what makes
+        #   barge-in feel human.
+        # * Affective dialog is deliberately absent: it is a 2.5 native-audio
+        #   feature and the Live API rejects it outright on 3.1/3.8 models.
+        return {
+            "google_voice": voice or "Puck",
+            "google_language_code": "en-US",
+            "google_input_transcription": True,
+            "google_output_transcription": True,
+            "google_vad": {
+                "silence_duration_ms": 350,
+                "prefix_padding_ms": 100,
+                "start_sensitivity": "high",
+                "end_sensitivity": "high",
+            },
+            "google_activity_handling": "interrupts",
+            "google_turn_coverage": "activity_only",
+        }
+    return {}
 
 
 # ---------------------------------------------------------------------------
@@ -437,6 +498,37 @@ class ConnectionService:
             return None
         key = self._vault.decrypt(record.key_encrypted)
         return build_realtime_model(record.provider, key, record.model)
+
+    async def resolve_session_realtime(
+        self, user_id: str, requested_model: str | None, settings: Any
+    ) -> tuple[Any, str] | None:
+        """Bind a pydantic-ai realtime model for this voice session.
+
+        Preference: explicit composer pick → saved voice connection → platform env.
+        Returns `(model_instance, provider:model)` or None when no key exists.
+        """
+        if requested_model:
+            provider, _, name = requested_model.partition(":")
+            provider = normalize_realtime_provider(provider or requested_model)
+            name = name or default_realtime_model_id(provider)
+            key = await self.key_for_provider(user_id, provider)
+            if key:
+                return build_realtime_model(provider, key, name), f"{provider}:{name}"
+
+        record = await self.get_active(user_id, "voice")
+        if record is not None:
+            key = self._vault.decrypt(record.key_encrypted)
+            model_str = f"{record.provider}:{record.model}"
+            return build_realtime_model(record.provider, key, record.model), model_str
+
+        model_str = settings.realtime_model
+        provider, _, name = model_str.partition(":")
+        provider = normalize_realtime_provider(provider or model_str)
+        name = name or default_realtime_model_id(provider)
+        key = await self.key_for_provider(user_id, provider)
+        if not key:
+            return None
+        return build_realtime_model(provider, key, name), f"{provider}:{name}"
 
     # -- masked view for APIs ---------------------------------------------
 

@@ -69,13 +69,15 @@ run completed: usage recorded, messages persisted, SSE run.finished
 
 ## Voice modes
 
+Voice and chat models are selected separately. Anthropic (and other chat providers)
+never speak; Gemini Live / OpenAI Realtime never run specialists.
+
 | Mode | Path |
 | ---- | ---- |
-| `realtime` | Browser mic → AudioWorklet → PCM/24kHz → WebSocket → `RealtimeSession` (speech-to-speech with server-side tools) → transcript + audio frames back |
+| `realtime` | Mic PCM → voice companion (`pydantic_ai.realtime`, Gemini Live) for live speech. Final user transcripts are handed to the **chat orchestrator** (Anthropic by default) on the same conversation. Tool/artifact events stream to the UI; spoken cues are injected back into the Live session so the caller hears progress. A new utterance cancels/replaces an in-flight run (live corrections: "make it white"). |
 | `browser-fallback` | Browser SpeechRecognition → WebSocket `text` turn → orchestrator run → transcript; SpeechSynthesis renders the reply locally |
 
-Both modes share delegation, guardrails, and audit because every turn routes through the
-same orchestrator.
+The conversational layer and the work layer share one conversation, guardrails, and audit.
 
 ## Extending
 

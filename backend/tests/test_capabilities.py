@@ -13,7 +13,10 @@ from httpx import Request, Response
 
 from voicefirst.agents.deps import AgentDeps
 from voicefirst.agents.factory import (
+    DEFAULT_MAX_OUTPUT_TOKENS,
+    THINKING_MAX_OUTPUT_TOKENS,
     _thinking_capability,
+    _tool_output_limits_capability,
     build_orchestrator,
     build_specialist,
 )
@@ -77,6 +80,40 @@ def test_thinking_level_creates_capability():
     s = _settings().model_copy(update={"thinking_level": "high"})
     cap = _thinking_capability(s)
     assert isinstance(cap, Thinking)
+
+
+# ---------------------------------------------------------------------------
+# Output budget and deliverable preservation
+# ---------------------------------------------------------------------------
+
+
+def test_specialist_reserves_output_tokens_for_long_deliverables():
+    """Specialists must not inherit the provider's ~4k default, which cut a
+    generated marketing page off mid-tag."""
+    agent = build_specialist("marketing", _tool_model(), _engine(), _settings())
+    assert agent.model_settings["max_tokens"] == DEFAULT_MAX_OUTPUT_TOKENS
+
+
+def test_thinking_specialist_gets_a_larger_output_cap():
+    settings = _settings().model_copy(update={"thinking_level": "high"})
+    agent = build_specialist("marketing", _tool_model(), _engine(), settings)
+    assert agent.model_settings["max_tokens"] == THINKING_MAX_OUTPUT_TOKENS
+
+
+def test_delegation_returns_are_exempt_from_tool_output_truncation():
+    """delegate_task/run_workflow carry whole deliverables; truncating them to
+    4k leaves the orchestrator with an unusable half-finished artifact."""
+    from pydantic_ai_harness.tool_output_limits import Passthrough, Truncate
+
+    cap = _tool_output_limits_capability(preserve_delegation=True)
+    for name in ("delegate_task", "run_workflow"):
+        bands = cap.per_tool[name]
+        assert len(bands) == 1
+        assert isinstance(bands[0].action, Passthrough)
+    # Ordinary tool returns are still bounded.
+    assert isinstance(cap.bands[0].action, Truncate)
+    # Specialists keep the default behavior (no delegation tools in scope).
+    assert not _tool_output_limits_capability().per_tool
 
 
 # ---------------------------------------------------------------------------

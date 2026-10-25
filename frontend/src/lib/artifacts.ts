@@ -126,8 +126,13 @@ function defaultTitle(kind: ArtifactKind, lang: string): string {
 /**
  * Split assistant text into prose and artifact segments. `keyPrefix` makes
  * artifact ids unique across messages, so the panel can address each one.
+ *
+ * `final` marks the message as no longer streaming. A truncation (for example
+ * a provider output-token cap) can end a run with the artifact fence still
+ * open; treating it as complete lets the panel show the source/preview instead
+ * of claiming it is "generating" forever.
  */
-export function parseSegments(text: string, keyPrefix = "a"): Segment[] {
+export function parseSegments(text: string, keyPrefix = "a", final = false): Segment[] {
   const lines = text.split("\n");
   const segments: Segment[] = [];
   let prose: string[] = [];
@@ -191,7 +196,7 @@ export function parseSegments(text: string, keyPrefix = "a"): Segment[] {
         title: attrs.title || defaultTitle(kind, lang),
         language: lang || (kind === "image" ? "png" : kind),
         content: body.replace(/^\n+/, "").replace(/\s+$/, ""),
-        complete: end !== -1,
+        complete: end !== -1 || final,
       },
     });
     i = end === -1 ? lines.length : end + 1;

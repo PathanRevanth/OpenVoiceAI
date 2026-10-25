@@ -40,6 +40,7 @@ import "streamdown/styles.css";
 import { ArtifactPanel } from "@/components/artifact-panel";
 import { parseSegments, type Artifact } from "@/lib/artifacts";
 import { notify } from "@/lib/notify";
+import { VoiceOrb } from "@/components/voice-orb";
 import {
   Approval,
   ChatAttachmentView,
@@ -69,6 +70,8 @@ interface Turn {
   attachments?: ChatAttachmentView[];
   thinking?: string;
   thinkingStreaming?: boolean;
+  /** True while a live voice caption is still being updated. */
+  live?: boolean;
   createdAt?: string;
 }
 
@@ -96,6 +99,7 @@ function AssistantInner() {
   const [model, setModel] = useState<string | null>(null);
   const [effort, setEffort] = useState<ReasoningEffort | null>(null);
   const [selectedVoice, setSelectedVoice] = useState<string | null>(null);
+  const [voiceModel, setVoiceModel] = useState<string | null>(null);
   // Artifacts workspace: derived from assistant turns; the panel auto-opens
   // when a new artifact streams in during a run or voice session.
   const [artifactsOpen, setArtifactsOpen] = useState(false);
@@ -105,7 +109,9 @@ function AssistantInner() {
     () =>
       turns.flatMap((turn, i) =>
         turn.role === "assistant"
-          ? parseSegments(turn.text, `t${i}`).flatMap((s) => (s.type === "artifact" ? [s.artifact] : []))
+          ? parseSegments(turn.text, `t${i}`, !turn.streaming).flatMap((s) =>
+              s.type === "artifact" ? [s.artifact] : [],
+            )
           : [],
       ),
     [turns],
@@ -145,8 +151,17 @@ function AssistantInner() {
   const wsRef = useRef<WebSocket | null>(null);
   const mediaRef = useRef<MediaStream | null>(null);
   const audioCtxRef = useRef<AudioContext | null>(null);
+  const playbackCtxRef = useRef<AudioContext | null>(null);
+  const playerNodeRef = useRef<AudioWorkletNode | null>(null);
+  const turnDoneRef = useRef(false);
+  const playerIdleRef = useRef(true);
+  /** Transcript index currently rendered as the live caption, per speaker. */
+  const liveIdxRef = useRef<{ user: number | null; assistant: number | null }>({ user: null, assistant: null });
+  /** Highest finalized transcript index per speaker (cancelled tails are dropped). */
+  const finalizedIdxRef = useRef<{ user: number; assistant: number }>({ user: -1, assistant: -1 });
   const processorRef = useRef<AudioWorkletNode | null>(null);
   const recogRef = useRef<{ stop: () => void } | null>(null);
+  const voiceModeRef = useRef<"idle" | "listening" | "thinking" | "speaking" | "fallback">("idle");
   const pausedRunRef = useRef<string | null>(null);
   const lastRunIdRef = useRef<string | null>(null);
   const pendingModelRef = useRef<string | null>(null);
@@ -159,6 +174,39 @@ function AssistantInner() {
       }
       return [...prev, turn];
     });
+  }, []);
+
+  /** Update (or open) the live caption turn for a speaker. */
+  const upsertLiveTurn = useCallback((role: "user" | "assistant", text: string, index?: number | null) => {
+    const idx = typeof index === "number" ? index : null;
+    // After a turn is finalized (reply done or barged in), later deltas with the
+    // same index are the provider's cancelled tail — they were never heard.
+    if (idx !== null && idx <= finalizedIdxRef.current[role]) return;
+    const startsNew = idx !== null ? idx !== liveIdxRef.current[role] : liveIdxRef.current[role] === null;
+    liveIdxRef.current[role] = idx;
+    setTurns((prev) => {
+      const next = prev.map((t) => (t.live && t.role !== role ? { ...t, live: false } : t));
+      if (startsNew) {
+        next.push({ role, text, live: true });
+        return next;
+      }
+      for (let i = next.length - 1; i >= 0; i--) {
+        if (next[i].live && next[i].role === role) {
+          next[i] = { ...next[i], text };
+          return next;
+        }
+      }
+      next.push({ role, text, live: true });
+      return next;
+    });
+  }, []);
+
+  const finalizeLiveTurns = useCallback(() => {
+    const { user, assistant } = liveIdxRef.current;
+    if (user !== null) finalizedIdxRef.current.user = Math.max(finalizedIdxRef.current.user, user);
+    if (assistant !== null) finalizedIdxRef.current.assistant = Math.max(finalizedIdxRef.current.assistant, assistant);
+    liveIdxRef.current = { user: null, assistant: null };
+    setTurns((prev) => (prev.some((t) => t.live) ? prev.map((t) => (t.live ? { ...t, live: false } : t)) : prev));
   }, []);
 
   // --- live plan: official Plan card in the thread + to-do panel at the composer ---
@@ -213,11 +261,11 @@ function AssistantInner() {
     });
   }, []);
 
-  const finalizeTurn = useCallback(() => {
+  const finalizeTurn = useCallback((text?: string) => {
     setTurns((prev) => {
       const last = prev[prev.length - 1];
       if (last?.role === "assistant" && last.streaming) {
-        return [...prev.slice(0, -1), { ...last, streaming: false }];
+        return [...prev.slice(0, -1), { ...last, text: text ?? last.text, streaming: false }];
       }
       return prev;
     });
@@ -294,9 +342,9 @@ function AssistantInner() {
   }, [busy]);
 
   // --- run-event pump (chat + voice text turns) ---
-  const handleEvents = useCallback(
-    async (events: AsyncGenerator<RunEvent>) => {
-      for await (const ev of events) {
+  const applyRunEvent = useCallback(
+    (ev: RunEvent, options?: { background?: boolean }) => {
+        const background = options?.background === true;
         switch (ev.type) {
           case "run.started":
             if (ev.data.conversation_id) {
@@ -307,6 +355,10 @@ function AssistantInner() {
             if (ev.data.run_id) lastRunIdRef.current = String(ev.data.run_id);
             if (ev.data.agent && ev.data.agent !== "orchestrator") {
               addTurn({ role: "system", text: `specialist: ${ev.data.agent}` });
+            }
+            if (!background) {
+              setBusy(true);
+              setVoice((v) => (v.mode === "idle" ? v : { ...v, mode: "thinking", info: v.info }));
             }
             break;
           case "text.delta":
@@ -338,7 +390,8 @@ function AssistantInner() {
             break;
           }
           case "text.done": {
-            finalizeTurn();
+            const finalText = String(ev.data.text ?? "");
+            finalizeTurn(finalText || undefined);
             const runId = lastRunIdRef.current;
             const modelLabel = pendingModelRef.current;
             const now = new Date().toISOString();
@@ -424,10 +477,16 @@ function AssistantInner() {
               if (last?.role === "system" && last.text === toolLine) return prev;
               return [...prev, { role: "system" as const, text: toolLine }];
             });
-            setVoice((v) => ({ ...v, mode: "thinking" }));
+            // Background runs must not drive the orb: the caller may still be
+            // talking, and a missed tool.finished would pin it on "Thinking…".
+            if (!background) setVoice((v) => ({ ...v, mode: "thinking" }));
             break;
           case "tool.finished":
-            setVoice((v) => ({ ...v, mode: "idle" }));
+            if (!background) {
+              setVoice((v) =>
+                v.mode === "idle" ? v : { ...v, mode: "listening", info: v.info },
+              );
+            }
             break;
           case "plan.proposed":
             onPlanProposed(normalizePlanItems(ev.data.items));
@@ -465,6 +524,14 @@ function AssistantInner() {
               ev.data.status === "awaiting_approval" && ev.data.run_id
                 ? String(ev.data.run_id)
                 : null;
+            if (!background) {
+              setBusy(false);
+              setVoice((v) => (v.mode === "idle" ? v : { ...v, mode: "listening", info: v.info }));
+            } else {
+              // A background run that flips the orb to "thinking" must hand it
+              // back; never clobber an in-progress spoken reply.
+              setVoice((v) => (v.mode === "thinking" ? { ...v, mode: "listening" } : v));
+            }
             if (ev.data.status === "completed") {
               // The orchestrator concluded the task; close out any steps it
               // finished without a final status update.
@@ -485,11 +552,20 @@ function AssistantInner() {
             break;
           case "run.failed":
             addTurn({ role: "system", text: `failed: ${ev.data.error}` });
+            if (background) {
+              setVoice((v) => (v.mode === "thinking" ? { ...v, mode: "listening" } : v));
+            }
             break;
         }
-      }
     },
     [addTurn, finalizeTurn, setActiveId, onPlanProposed, onPlanTask],
+  );
+
+  const handleEvents = useCallback(
+    async (events: AsyncGenerator<RunEvent>) => {
+      for await (const ev of events) applyRunEvent(ev);
+    },
+    [applyRunEvent],
   );
 
   /** Mirror the live plan into the thread as an in-message Plan card. */
@@ -670,60 +746,217 @@ function AssistantInner() {
     mediaRef.current = null;
     audioCtxRef.current?.close().catch(() => {});
     audioCtxRef.current = null;
+    playerNodeRef.current?.port.postMessage("clear");
+    playerNodeRef.current?.disconnect();
+    playerNodeRef.current = null;
+    playbackCtxRef.current?.close().catch(() => {});
+    playbackCtxRef.current = null;
+    turnDoneRef.current = false;
+    playerIdleRef.current = true;
+    liveIdxRef.current = { user: null, assistant: null };
+    finalizedIdxRef.current = { user: -1, assistant: -1 };
     recogRef.current?.stop();
     recogRef.current = null;
-    wsRef.current?.send(JSON.stringify({ type: "stop" }));
+    try {
+      wsRef.current?.send(JSON.stringify({ type: "stop" }));
+    } catch {
+      /* socket already closed */
+    }
+    voiceModeRef.current = "idle";
+    finalizeLiveTurns();
     setVoice({ mode: "idle" });
-  }, []);
+  }, [finalizeLiveTurns]);
 
   const startVoice = useCallback(async () => {
     try {
       const ws = await connectVoice();
       wsRef.current = ws;
+      let outputRate = 24000;
+      const startWaiters: Array<(frame: { type: string; data: Record<string, unknown> }) => void> = [];
       ws.onmessage = (msg) => {
         const frame = JSON.parse(msg.data as string) as {
           type: string;
           data: Record<string, unknown>;
         };
+        if (
+          frame.type.startsWith("run.") ||
+          frame.type.startsWith("text.") ||
+          frame.type.startsWith("tool.") ||
+          frame.type.startsWith("plan.") ||
+          frame.type === "thinking.delta" ||
+          frame.type === "thinking.done" ||
+          frame.type === "sources" ||
+          frame.type === "followups" ||
+          frame.type === "usage" ||
+          frame.type === "approval.requested"
+        ) {
+          applyRunEvent(frame as RunEvent, { background: true });
+          return;
+        }
+        if (frame.type === "conversation" && frame.data.id) {
+          const id = String(frame.data.id);
+          setConversationId(id);
+          setActiveId(id);
+          return;
+        }
         if (frame.type === "state") {
+          const sessionReady =
+            Boolean(frame.data.session_id) ||
+            frame.data.mode === "browser-fallback" ||
+            Boolean(frame.data.error);
+          if (sessionReady) startWaiters.splice(0).forEach((resolve) => resolve(frame));
           const mode = frame.data.mode as string | undefined;
-          if (mode === "realtime") setVoice({ mode: "listening", info: "Server speech-to-speech" });
-          else if (mode === "browser-fallback")
+          if (mode === "realtime") {
+            voiceModeRef.current = "listening";
+            const modelName = String(frame.data.model ?? "Gemini Live");
+            setVoice({ mode: "listening", info: `Gemini Live · ${modelName}` });
+            if (typeof frame.data.output_rate === "number") outputRate = frame.data.output_rate as number;
+          } else if (mode === "browser-fallback") {
+            voiceModeRef.current = "fallback";
             setVoice({ mode: "fallback", info: String(frame.data.info ?? "Browser speech mode") });
-          else if (mode === "idle") setVoice({ mode: "idle" });
+          } else if (mode === "idle") {
+            voiceModeRef.current = "idle";
+            setVoice({ mode: "idle" });
+          }
+          if (frame.data.error) {
+            addTurn({ role: "system", text: `voice: ${String(frame.data.error)}` });
+          }
         } else if (frame.type === "transcript") {
           const speaker = frame.data.speaker;
           const text = String(frame.data.text ?? "");
+          const isFinal = frame.data.final === true;
           if (text) {
-            addTurn({ role: speaker === "user" ? "user" : "assistant", text });
-            if (speaker === "assistant") {
-              setVoice((v) => ({ ...v, mode: "idle" }));
+            const role = speaker === "user" ? "user" : "assistant";
+            upsertLiveTurn(role, text, typeof frame.data.index === "number" ? frame.data.index : null);
+            if (isFinal) finalizeLiveTurns();
+            if (speaker === "user") {
+              turnDoneRef.current = false;
+              voiceModeRef.current = "listening";
+              setVoice((v) => ({ ...v, mode: "listening", info: v.info }));
+            } else if (isFinal && voiceModeRef.current === "fallback") {
               speak(text);
-              refreshConversations();
             }
           }
         } else if (frame.type === "speech") {
-          playPcmChunk(String(frame.data), audioCtxRef);
+          const player = playerNodeRef.current;
+          if (player) {
+            playerIdleRef.current = false;
+            player.port.postMessage(pcm16Base64ToFloat32(String(frame.data)));
+            if (voiceModeRef.current !== "speaking") {
+              voiceModeRef.current = "speaking";
+              setVoice((v) => ({ ...v, mode: "speaking", info: v.info }));
+            }
+          }
+        } else if (frame.type === "interrupted") {
+          // Barge-in: drop everything still queued for playback this instant.
+          playerNodeRef.current?.port.postMessage("clear");
+          playerIdleRef.current = true;
+          turnDoneRef.current = false;
+          finalizeLiveTurns();
+          voiceModeRef.current = "listening";
+          setVoice((v) => ({ ...v, mode: "listening", info: v.info }));
+        } else if (frame.type === "turn") {
+          const state = String(frame.data.state ?? "");
+          if (state === "speaking") {
+            turnDoneRef.current = false;
+            voiceModeRef.current = "speaking";
+            setVoice((v) => ({ ...v, mode: "speaking", info: v.info }));
+          } else if (state === "done") {
+            turnDoneRef.current = true;
+            finalizeLiveTurns();
+            refreshConversations();
+            if (playerIdleRef.current) {
+              turnDoneRef.current = false;
+              voiceModeRef.current = "listening";
+              setVoice((v) => ({ ...v, mode: "listening", info: v.info }));
+            }
+          } else if (state === "listening") {
+            turnDoneRef.current = false;
+            playerIdleRef.current = true;
+            finalizeLiveTurns();
+            voiceModeRef.current = "listening";
+            setVoice((v) => ({ ...v, mode: "listening", info: v.info }));
+          }
         }
       };
 
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      mediaRef.current = stream;
-      const audioCtx = new AudioContext({ sampleRate: 24000 });
-      audioCtxRef.current = audioCtx;
-      await audioCtx.audioWorklet.addModule("/pcm-worklet.js");
-      const worklet = new AudioWorkletNode(audioCtx, "pcm-capture");
-      processorRef.current = worklet;
-      worklet.port.onmessage = (e: MessageEvent) => {
-        if (wsRef.current?.readyState === WebSocket.OPEN && e.data instanceof Float32Array) {
-          const pcm = new Int16Array(e.data.length);
-          for (let i = 0; i < e.data.length; i++) {
-            pcm[i] = Math.max(-32768, Math.min(32767, e.data[i] * 32767));
+      const startData: Record<string, string> = {};
+      if (voiceModel) startData.model = voiceModel;
+      if (selectedVoice) startData.voice = selectedVoice;
+      if (model) startData.chat_model = model;
+      if (conversationId) startData.conversation_id = conversationId;
+      ws.send(JSON.stringify({ type: "start", data: startData }));
+
+      const started = await new Promise<{ type: string; data: Record<string, unknown> }>((resolve, reject) => {
+        const timer = window.setTimeout(() => reject(new Error("voice session timed out")), 12_000);
+        startWaiters.push((frame) => {
+          window.clearTimeout(timer);
+          resolve(frame);
+        });
+      });
+
+      const mode = started.data.mode as string | undefined;
+      if (started.data.error && mode !== "realtime") {
+        throw new Error(String(started.data.error));
+      }
+      if (mode === "realtime") {
+        const inputRate = typeof started.data.input_rate === "number" ? (started.data.input_rate as number) : 16000;
+        outputRate = typeof started.data.output_rate === "number" ? (started.data.output_rate as number) : 24000;
+
+        // Playback first: a gapless AudioWorklet queue, created while the click
+        // is still the active user gesture. "clear" is the barge-in flush.
+        const playbackCtx = new AudioContext({ sampleRate: outputRate, latencyHint: "interactive" });
+        playbackCtxRef.current = playbackCtx;
+        await playbackCtx.resume();
+        await playbackCtx.audioWorklet.addModule("/pcm-player-processor.js");
+        const player = new AudioWorkletNode(playbackCtx, "pcm-player-processor");
+        player.port.onmessage = (event: MessageEvent) => {
+          if (event.data === "idle") {
+            playerIdleRef.current = true;
+            if (turnDoneRef.current) {
+              turnDoneRef.current = false;
+              voiceModeRef.current = "listening";
+              setVoice((v) => ({ ...v, mode: "listening", info: v.info }));
+            }
           }
-          wsRef.current.send(JSON.stringify({ type: "pcm", data: arrayBufferToBase64(pcm.buffer) }));
+        };
+        player.connect(playbackCtx.destination);
+        playerNodeRef.current = player;
+        // Transcript indexes restart with each provider session.
+        liveIdxRef.current = { user: null, assistant: null };
+        finalizedIdxRef.current = { user: -1, assistant: -1 };
+
+        const stream = await navigator.mediaDevices.getUserMedia({
+          audio: { echoCancellation: true, noiseSuppression: true, channelCount: 1 },
+        });
+        mediaRef.current = stream;
+        // Capture natively at 16 kHz so every worklet frame is exactly one
+        // 8 ms Gemini frame — no per-chunk resampling and 3x fewer WS messages.
+        let audioCtx: AudioContext;
+        try {
+          audioCtx = new AudioContext({ sampleRate: inputRate, latencyHint: "interactive" });
+        } catch {
+          audioCtx = new AudioContext({ latencyHint: "interactive" });
         }
-      };
-      audioCtx.createMediaStreamSource(stream).connect(worklet);
+        audioCtxRef.current = audioCtx;
+        await audioCtx.resume();
+        await audioCtx.audioWorklet.addModule("/pcm-worklet.js");
+        const worklet = new AudioWorkletNode(audioCtx, "pcm-capture");
+        processorRef.current = worklet;
+        const fromRate = audioCtx.sampleRate;
+        worklet.port.onmessage = (e: MessageEvent) => {
+          if (wsRef.current?.readyState === WebSocket.OPEN && e.data instanceof Float32Array) {
+            const pcm = resampleToPcm16(e.data, fromRate, inputRate);
+            wsRef.current.send(
+              JSON.stringify({ type: "pcm", data: arrayBufferToBase64(pcm.buffer as ArrayBuffer) }),
+            );
+          }
+        };
+        audioCtx.createMediaStreamSource(stream).connect(worklet);
+        voiceModeRef.current = "listening";
+        setVoice({ mode: "listening", info: "Gemini Live speech-to-speech" });
+        return;
+      }
 
       const SR =
         (window as unknown as { SpeechRecognition?: new () => SpeechRecognitionLike }).SpeechRecognition ??
@@ -744,24 +977,13 @@ function AssistantInner() {
         recog.start();
         recogRef.current = recog;
       }
-      // Start the realtime session with the composer's model + voice. The
-      // realtime model follows the selected chat model's provider (OpenAI â†’
-      // gpt-realtime, Google â†’ Gemini Live); unknown providers fall back to
-      // the platform default and voice turns use browser speech if the
-      // provider has no realtime API.
-      const provider = (model ?? "").split(":", 1)[0].toLowerCase();
-      const startData: Record<string, string> = {};
-      if (provider === "openai" || provider === "google") {
-        startData.model = `${provider}:${provider === "openai" ? "gpt-realtime" : "gemini-2.5-flash-native-audio-latest"}`;
-        if (selectedVoice) startData.voice = selectedVoice;
-      }
-      ws.send(JSON.stringify({ type: "start", data: startData }));
-      setVoice((v) => (v.mode === "fallback" ? v : { mode: "listening", info: v.info }));
+      voiceModeRef.current = "fallback";
+      setVoice({ mode: "fallback", info: String(started.data.info ?? "Browser speech mode") });
     } catch (err) {
       addTurn({ role: "system", text: `voice unavailable: ${err instanceof Error ? err.message : err}` });
       stopVoice();
     }
-  }, [addTurn, speak, stopVoice, refreshConversations, model, selectedVoice]);
+  }, [addTurn, speak, stopVoice, refreshConversations, upsertLiveTurn, finalizeLiveTurns, selectedVoice, voiceModel, model, conversationId, applyRunEvent, setActiveId]);
 
   const role = user?.role ?? "viewer";
   const isEmpty = turns.length === 0;
@@ -856,9 +1078,19 @@ function AssistantInner() {
         <div ref={scrollRef} id="assistant-thread" className="h-full overflow-y-auto">
         {isEmpty ? (
           <div className="mx-auto flex h-full max-w-2xl flex-col items-center justify-center px-6 pb-24">
-            <Icon name="waveform" size={40} strokeWidth={1.75} className="text-[var(--text-1)]" />
+            <VoiceOrb
+              mode={voice.mode}
+              size={96}
+              onClick={() => (voice.mode === "idle" ? void startVoice() : stopVoice())}
+            />
             <h2 className="mt-5 text-center font-serif text-[34px] leading-tight tracking-tight text-[var(--text-1)]">
-              What do you want to know?
+              {voice.mode === "idle"
+                ? "What do you want to know?"
+                : voice.mode === "speaking"
+                  ? "Go ahead — interrupt me anytime"
+                  : voice.mode === "thinking"
+                    ? "Thinking…"
+                    : "Listening — speak like you would to a colleague"}
             </h2>
             {demoMode && (
               <a
@@ -879,6 +1111,11 @@ function AssistantInner() {
           </div>
         ) : (
           <div className="mx-auto max-w-3xl space-y-5 px-6 py-8">
+            {voice.mode !== "idle" && (
+              <div className="flex justify-center pb-2">
+                <VoiceOrb mode={voice.mode} size={64} onClick={stopVoice} />
+              </div>
+            )}
             {blocks.map((block) =>
               block.kind === "activity" ? (
                 <ActivityBlock key={`act-${block.items[0].idx}`} items={block.items} />
@@ -1019,6 +1256,8 @@ function AssistantInner() {
         onEffortChange={setEffort}
         voice={selectedVoice}
         onVoiceChange={setSelectedVoice}
+        voiceModel={voiceModel}
+        onVoiceModelChange={setVoiceModel}
         draftKey={conversationId}
       />
     </div>
@@ -1180,7 +1419,12 @@ function MessageBlock({
         ) : null}
         {turn.role === "assistant" ? (
           <div className="[&_code]:rounded [&_code]:bg-[var(--panel-hover)] [&_code]:px-1 [&_pre]:overflow-x-auto [&_pre]:rounded-xl [&_pre]:border [&_pre]:border-[var(--hairline)] [&_pre]:bg-[var(--bg-raised)] [&_pre]:p-3 [&_strong]:font-semibold">
-            <AssistantContent text={turn.text} keyPrefix={`t${idx}`} onOpen={onOpenArtifact} />
+            <AssistantContent
+              text={turn.text}
+              keyPrefix={`t${idx}`}
+              final={!turn.streaming}
+              onOpen={onOpenArtifact}
+            />
           </div>
         ) : editing ? (
           <div>
@@ -1336,13 +1580,18 @@ function MessageBlock({
 function AssistantContent({
   text,
   keyPrefix,
+  final,
   onOpen,
 }: {
   text: string;
   keyPrefix: string;
+  final: boolean;
   onOpen: (id: string) => void;
 }) {
-  const segments = useMemo(() => parseSegments(text || "…", keyPrefix), [text, keyPrefix]);
+  const segments = useMemo(
+    () => parseSegments(text || "…", keyPrefix, final),
+    [text, keyPrefix, final],
+  );
   return (
     <>
       {segments.map((seg, idx) =>
@@ -1598,20 +1847,38 @@ function arrayBufferToBase64(buffer: ArrayBuffer): string {
   return btoa(binary);
 }
 
-function playPcmChunk(b64: string, ctxRef: { current: AudioContext | null }) {
+function resampleToPcm16(input: Float32Array, fromRate: number, toRate: number): Int16Array {
+  if (!input.length) return new Int16Array(0);
+  if (fromRate === toRate) {
+    const pcm = new Int16Array(input.length);
+    for (let i = 0; i < input.length; i++) pcm[i] = Math.max(-32768, Math.min(32767, input[i] * 32767));
+    return pcm;
+  }
+  const ratio = fromRate / toRate;
+  const outLen = Math.max(1, Math.round(input.length / ratio));
+  const pcm = new Int16Array(outLen);
+  for (let i = 0; i < outLen; i++) {
+    const src = i * ratio;
+    const i0 = Math.floor(src);
+    const i1 = Math.min(i0 + 1, input.length - 1);
+    const sample = input[i0] * (1 - (src - i0)) + input[i1] * (src - i0);
+    pcm[i] = Math.max(-32768, Math.min(32767, sample * 32767));
+  }
+  return pcm;
+}
+
+function pcm16Base64ToFloat32(b64: string): Float32Array {
   const raw = atob(b64);
-  const bytes = new Uint8Array(raw.length);
-  for (let i = 0; i < raw.length; i++) bytes[i] = raw.charCodeAt(i);
-  const pcm = new Int16Array(bytes.buffer);
-  const ctx = ctxRef.current ?? new AudioContext({ sampleRate: 24000 });
-  ctxRef.current = ctx;
-  const buffer = ctx.createBuffer(1, pcm.length, ctx.sampleRate);
-  const data = buffer.getChannelData(0);
-  for (let i = 0; i < pcm.length; i++) data[i] = pcm[i] / 32768;
-  const source = ctx.createBufferSource();
-  source.buffer = buffer;
-  source.connect(ctx.destination);
-  source.start();
+  const length = raw.length >> 1;
+  const out = new Float32Array(length);
+  for (let i = 0; i < length; i++) {
+    const lo = raw.charCodeAt(2 * i);
+    const hi = raw.charCodeAt(2 * i + 1);
+    let sample = (hi << 8) | lo;
+    if (sample >= 0x8000) sample -= 0x10000;
+    out[i] = sample / 32768;
+  }
+  return out;
 }
 
 export default function AssistantPage() {
