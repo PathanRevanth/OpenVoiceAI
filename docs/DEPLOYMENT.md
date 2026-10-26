@@ -253,8 +253,12 @@ Checked against the live deployment, not just locally:
   - Uploaded DOCX/XLSX/PPTX files were extracted and a PNG was described; the
     512 px thumbnail survived a reload and conversation reopen.
   - Web search returned Python 3.15.1 with 4 cited sources.
-  - Actual speech capture still needs a manual test in a browser with a real
-    microphone; automation browsers do not grant mic access.
+  - A synthetic browser microphone (the speech WAV routed through an overridden
+    `getUserMedia`) streamed 500 PCM frames. The composer textarea showed the
+    live partial transcript `Brown fox jumps over the lazy dog.` and cleared
+    when the turn finalized, proving the composer mirror works in the deployed
+    frontend. A real-device microphone test is still recommended because
+    automation browsers do not grant hardware mic permission.
 
 ## Neon quota incident and database replacement (2026-10-26)
 
