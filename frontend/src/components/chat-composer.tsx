@@ -147,19 +147,57 @@ function mediaTypeFor(file: File): string {
   return EXTENSION_TYPES[ext] ?? "";
 }
 
+/** Models that cannot read audio/video even though they are Gemini models. */
+const MEDIA_SPECIALIZED = /transcribe|robotics|computer-use|nano-banana|embedding|live/i;
+
+/** Gemini 3+ models accept native audio and video. The 2.5 line does not
+ * reliably accept audio through the chat API, and `*-latest` aliases have
+ * been observed to stall on media, so both are excluded. */
+function isMediaModel(modelId: string): boolean {
+  return /^google:gemini-(?:3|4)/.test(modelId) && !MEDIA_SPECIALIZED.test(modelId);
+}
+
 /** Audio and video are native inputs only on Gemini chat models; pick a
  * general-purpose one so an attachment never reaches a provider that rejects
- * the binary block. */
+ * the binary block. Gemini 3.5 Flash is the verified default. */
 function mediaModel(options: ModelOption[]): ModelOption | undefined {
-  const specialized = /transcribe|robotics|computer-use|nano-banana|embedding/i;
-  return (
-    options.find((o) => o.id === "google:gemini-flash-latest") ??
-    options.find((o) => o.id.startsWith("google:gemini-") && !specialized.test(o.id))
-  );
+  const preferred = [
+    "google:gemini-3.5-flash",
+    "google:gemini-3.8-flash",
+    "google:gemini-3.7-flash",
+    "google:gemini-3.6-flash",
+    "google:gemini-3-flash-preview",
+    "google:gemini-3.1-pro-preview",
+  ];
+  for (const id of preferred) {
+    const match = options.find((o) => o.id === id);
+    if (match) return match;
+  }
+  return options.find((o) => isMediaModel(o.id));
 }
 
 function isImage(mediaType: string): boolean {
   return mediaType.startsWith("image/");
+}
+
+/** Flatten a live provider catalog into the picker's option shape. */
+function modelOptionsFrom(catalog: ModelCatalog | null): ModelOption[] {
+  const out: ModelOption[] = [];
+  for (const p of Object.values(catalog?.providers ?? {})) {
+    if (p.status !== "ok") continue;
+    for (const m of p.models) {
+      out.push({
+        id: m.id,
+        name: m.name,
+        description: m.efforts.length ? `${p.label} · Thinking` : p.label,
+        keywords: [p.label, p.provider],
+        efforts: m.efforts.length
+          ? m.efforts.map((e) => ({ id: e, name: EFFORT_LABEL[e] }))
+          : undefined,
+      });
+    }
+  }
+  return out;
 }
 
 /** Downscale an image so the thread can persist a thumbnail without storing
@@ -298,7 +336,12 @@ export function ChatComposer({
   voiceMode: OrbMode;
   /** Latest user speech from the live voice session; mirrors into the textarea. */
   liveTranscript: string | null;
-  onSend: (message: string, attachments: ChatAttachmentInput[], agent: string | null) => void;
+  onSend: (
+    message: string,
+    attachments: ChatAttachmentInput[],
+    agent: string | null,
+    modelOverride?: string | null,
+  ) => void;
   onVoiceToggle: () => void;
   plan: PlanCardState | null;
   /** Selected chat model as a pydantic-ai model string; null = platform default. */
@@ -535,24 +578,7 @@ export function ChatComposer({
 
   const liveProviders = useMemo(() => Object.values(live?.providers ?? {}), [live]);
 
-  const modelOptions: ModelOption[] = useMemo(() => {
-    const out: ModelOption[] = [];
-    for (const p of liveProviders) {
-      if (p.status !== "ok") continue;
-      for (const m of p.models) {
-        out.push({
-          id: m.id,
-          name: m.name,
-          description: m.efforts.length ? `${p.label} · Thinking` : p.label,
-          keywords: [p.label, p.provider],
-          efforts: m.efforts.length
-            ? m.efforts.map((e) => ({ id: e, name: EFFORT_LABEL[e] }))
-            : undefined,
-        });
-      }
-    }
-    return out;
-  }, [liveProviders]);
+  const modelOptions: ModelOption[] = useMemo(() => modelOptionsFrom(live), [live]);
 
   // A configured alias (for example `claude-haiku-4-5`) resolves to the dated id
   // the provider lists (`claude-haiku-4-5-20251001`), so the picker shows it.
@@ -773,12 +799,44 @@ export function ChatComposer({
       }
     }
     const effectiveAgent = agentSlug ?? (webSearch ? "research" : null);
-    onSend(text, attachments, effectiveAgent);
+    // The user can switch models after attaching audio/video. Route this run
+    // to a capable model even when the picker was changed back to a text-only
+    // one, and keep the picker in sync for the next turn.
+    const hasMedia = attachments.some(
+      (a) => a.media_type.startsWith("audio/") || a.media_type.startsWith("video/"),
+    );
+    let modelOverride: string | null | undefined;
+    if (hasMedia && !isMediaModel(effectiveModel)) {
+      const google = mediaModel(modelOptions);
+      if (!google) {
+        setNotice(
+          "Audio and video need a Gemini 3.5 or newer model. Add a Google key on Connections, then pick one.",
+        );
+        return;
+      }
+      modelOverride = google.id;
+      selectModel(google.id);
+      setNotice(`Switched to ${google.name} to read audio and video.`);
+    }
+    onSend(text, attachments, effectiveAgent, modelOverride);
     setInput("");
     setAttachments([]);
     clearDraft();
     if (textareaRef.current) textareaRef.current.style.height = "auto";
-  }, [input, busy, attachments, agentSlug, webSearch, onSend, clearDraft, SLASH_COMMANDS, applySlash]);
+  }, [
+    input,
+    busy,
+    attachments,
+    agentSlug,
+    webSearch,
+    effectiveModel,
+    modelOptions,
+    onSend,
+    clearDraft,
+    selectModel,
+    SLASH_COMMANDS,
+    applySlash,
+  ]);
 
   const addFiles = useCallback(async (files: FileList | File[] | null) => {
     if (!files) return;
@@ -796,8 +854,21 @@ export function ChatComposer({
     const hasMedia = next.some(
       (a) => a.media_type.startsWith("audio/") || a.media_type.startsWith("video/"),
     );
-    if (hasMedia && !effectiveModel.startsWith("google:")) {
-      const google = mediaModel(modelOptions);
+    if (hasMedia && !isMediaModel(effectiveModel)) {
+      // The catalog loads asynchronously on mount. If the user attaches media
+      // before it arrives, fetch it now instead of wrongly concluding that no
+      // capable model exists.
+      let options = modelOptions;
+      if (options.length === 0) {
+        try {
+          const fresh = await backend.modelCatalog(false);
+          setLive(fresh);
+          options = modelOptionsFrom(fresh);
+        } catch {
+          /* fall through to the no-model notice */
+        }
+      }
+      const google = mediaModel(options);
       if (google) {
         selectModel(google.id);
         errors.push(`Switched to ${google.name} to read audio and video.`);
@@ -809,7 +880,7 @@ export function ChatComposer({
           if (media.startsWith("audio/") || media.startsWith("video/")) next.splice(i, 1);
         }
         errors.push(
-          "Audio and video need a Gemini model. Add a Google key on Connections, then pick a Gemini model.",
+          "Audio and video need a Gemini 3.5 or newer model. Add a Google key on Connections, then pick one.",
         );
       }
     }

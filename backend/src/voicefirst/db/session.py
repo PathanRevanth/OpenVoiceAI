@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import (
     async_sessionmaker,
     create_async_engine,
 )
+from sqlalchemy.pool import NullPool
 
 from voicefirst.db.models import Base
 
@@ -20,7 +21,20 @@ from voicefirst.db.models import Base
 class Database:
     def __init__(self, url: str) -> None:
         self.url = url
-        self.engine: AsyncEngine = create_async_engine(url, pool_pre_ping=True)
+        if url.startswith("postgresql"):
+            # Serverless Postgres (Neon free plan) bills compute time, and an
+            # idle pooled connection prevents the compute from scaling to zero.
+            # A long-lived Render instance would otherwise exhaust the monthly
+            # CU-hour quota in about two days. NullPool closes every connection
+            # when the request releases it, so Neon can suspend between turns.
+            self.engine: AsyncEngine = create_async_engine(
+                url,
+                poolclass=NullPool,
+                pool_pre_ping=True,
+                connect_args={"timeout": 20},
+            )
+        else:
+            self.engine = create_async_engine(url, pool_pre_ping=True)
         self.session_factory = async_sessionmaker(self.engine, expire_on_commit=False)
 
     async def create_all(self) -> None:

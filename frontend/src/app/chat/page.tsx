@@ -1558,8 +1558,8 @@ function AssistantInner() {
       <ChatComposer
         busy={busy}
         voiceMode={voice.mode}
-        onSend={(message, attachments, agent) =>
-          void sendText(message, attachments, agent, model)
+        onSend={(message, attachments, agent, modelOverride) =>
+          void sendText(message, attachments, agent, modelOverride ?? model)
         }
         onVoiceToggle={() => (voice.mode === "idle" ? void startVoice() : stopVoice())}
         plan={plan}

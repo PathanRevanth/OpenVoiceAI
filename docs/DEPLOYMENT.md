@@ -256,10 +256,59 @@ Checked against the live deployment, not just locally:
   - Actual speech capture still needs a manual test in a browser with a real
     microphone; automation browsers do not grant mic access.
 
+## Neon quota incident and database replacement (2026-10-26)
+
+The original Neon project (`polished-mouse-67655119`, store
+`store_aro4kaaaAEKwLaNm`) exhausted its free compute quota. Render could no
+longer start: `asyncpg.exceptions.InsufficientResourcesError: Your account or
+project has exceeded the quota`. The same failure surfaced as Vercel sign-in
+`500`s and backend request timeouts.
+
+Recovery used a fresh free Neon project (`odd-silence-31078256`, store
+`store_dlradAXaVSh7zlAN`, region `iad1`):
+
+- `neondb` holds Better Auth; `voicefirst` holds the control-plane tables.
+- The old `voicefirst-auth` store was disconnected from the Vercel project and
+  `voicefirst-db2` was connected for Production, so `DATABASE_URL` now points at
+  `ep-silent-dream-b8iwzyqo-pooler...`.
+- Render `VOICEFIRST_DATABASE_URL` points at the unpooled
+  `ep-silent-dream-b8iwzyqo...` host with `?ssl=require`.
+- The old project is retained but disconnected. Its auth users and
+  conversations are inaccessible while the quota is exceeded, so the new
+  database started empty and the demo admin was recreated.
+
+Two follow-ups are now part of the codebase:
+
+- `Database` uses SQLAlchemy `NullPool` for PostgreSQL. A long-lived Render
+  instance with pooled connections keeps Neon compute awake; on the free plan
+  that burns CU-hours even when nobody is chatting. `NullPool` closes each
+  connection when the request releases it so Neon can suspend.
+- Better Auth 1.7 expects an `issuer` column on `account`. The CLI migration
+  created the table without it, which made sign-up fail with
+  `column "issuer" of relation "account" does not exist`. The column was added
+  with `ALTER TABLE account ADD COLUMN IF NOT EXISTS issuer text`; sign-up,
+  sign-in, `/api/auth/token`, and authenticated backend calls all returned
+  `200` afterwards.
+
+Verified after the switch (Render deploy `dep-dbfemgavcj2c73fs8rt0` live):
+
+- `/health` returned `200`; `/api/models/catalog` reported Google `ok` with
+  Gemini 3.5 Flash available.
+- The demo admin signed in, the JWT carried `role: admin`, and
+  `/api/conversations` accepted it.
+- A synthetic 22.05 kHz mic stream resampled to 16 kHz reached the realtime
+  Gemini Live session. The live captions read back "The quick brown fox jumps
+  over the lazy dog." and "The access code is 7429.", and synthesized speech
+  frames returned for both turns.
+- Backend suite: **185 passed** with `NullPool` enabled.
+
 ## Troubleshooting
 
 - **Sign-up 500 on Vercel** — `DATABASE_URL` missing or the Neon integration
-  is not connected to the current environment. Run `vercel env ls`.
+  is not connected to the current environment. Run `vercel env ls`. If the
+  response mentions `InsufficientResourcesError`, the Neon project is over its
+  free compute quota; create a new project and repeat the replacement steps
+  above.
 - **CORS error in the browser** — add the frontend origin to
   `VOICEFIRST_CORS_ORIGINS` on Render and redeploy.
 - **Voice connects but no audio** — check the backend logs for provider key
